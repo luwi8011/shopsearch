@@ -1,0 +1,44 @@
+# shopsearch: price-research tools (MCP server) for Open WebUI.
+#   Open WebUI connection: MCP (Streamable HTTP) at http://127.0.0.1:8765/mcp
+#   Quick test:  curl 'http://127.0.0.1:8765/api/search?q=ar15+lower+parts+kit&sites=psa,ebay,amazon'
+#   Rebuild after editing app/:  docker compose up -d --build
+services:
+  shopsearch:
+    build: .
+    image: shopsearch:latest
+    container_name: shopsearch
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8765"   # localhost only; Open WebUI runs with host networking
+    shm_size: "1gb"              # Chromium needs more than Docker's 64 MB default
+    volumes:
+      - ./data:/data             # learned per-site fetch methods, discovered search URLs, browser cookies
+    environment:
+      SEARXNG_URL: "http://192.168.0.60:8080"
+      DEFAULT_SITES: "amazon,ebay"
+      # Local marketplaces: Erie, CO. LOCAL_RADIUS_MI is the default pickup radius
+      # (about a 30-minute drive); the model can raise it per search.
+      CRAIGSLIST_SITE: "denver"
+      FB_LOCATION: "erie-co"
+      HOME_ZIP: "80516"
+      LOCAL_RADIUS_MI: "25"
+      ZIP_CODE: "80516"          # eBay API shipping estimates
+      # eBay official API (Production keyset from developer.ebay.com):
+      # EBAY_CLIENT_ID: ""
+      # EBAY_CLIENT_SECRET: ""
+      # Home Assistant: each watch gets a switch on the Tools dashboard; off deletes the watch.
+      # HA_TOKEN (long-lived access token) lives in .env, not here.
+      # Local LLM that reviews new watch listings before any alert (OpenAI-compatible; Strata on this VM)
+      LLM_URL: "http://192.168.0.252:11434/v1"
+      LLM_MODEL: "qwen3.8-flash-next-iq3_xxs"
+      HA_URL: "http://192.168.0.161:8123"
+      HA_DASHBOARD: "ha-tools"
+      HA_NOTIFY: "mobile_app_localhost"   # the user's phone (Companion app registers as "localhost")
+      BROWSER_PAGES: "3"
+      SITE_TIMEOUT_S: "90"
+    env_file:
+      - path: .env               # HA_TOKEN=..., later EBAY_CLIENT_ID / EBAY_CLIENT_SECRET
+        required: false
+    mem_limit: 3g
+    labels:
+      - com.centurylinklabs.watchtower.enable=false   # locally built image

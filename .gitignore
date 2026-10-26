@@ -1,0 +1,7 @@
+# secrets
+.env
+# runtime state: browser cookies/profile, saved hunts and listings, logs
+data/
+__pycache__/
+*.pyc
+.venv/
