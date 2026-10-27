@@ -76,8 +76,10 @@ def tidy_url(url: str) -> str:
 
 def relevance(query: str, title: str) -> float:
     """Share of query words found in the title (0-1). Words with digits (model numbers like
-    "ar15", "g19", "300", "m8") are treated as required: missing one scores 0."""
-    toks = [t for t in re.findall(r"[a-z0-9]+", query.lower()) if t not in STOPWORDS]
+    "ar15", "g19", "300", "m8") are treated as required: missing one scores 0. A region suffix on a
+    model number (U6-IW-US, -EU, -UK) is dropped: stores often list just U6-IW."""
+    query = re.sub(r"\b([a-z0-9]*\d[a-z0-9]*(?:-[a-z0-9]+)*)-(?:us|eu|uk|ca|au)\b", r"\1", query.lower())
+    toks = [t for t in re.findall(r"[a-z0-9]+", query) if t not in STOPWORDS]
     if not toks:
         return 1.0
     squashed = re.sub(r"[^a-z0-9]", "", title.lower())
@@ -428,6 +430,41 @@ def facebook_listings(html: str) -> list[dict]:
             "price": parse_price(price.get("amount")),
             "price_text": price.get("formatted_amount", ""),
             "url": f"https://www.facebook.com/marketplace/item/{lid}/",
+            "details": " · ".join(bits),
+        })
+    return out
+
+
+# ---------------------------------------------------------------- walmart
+
+def walmart_listings(html: str, base_url: str) -> list[dict]:
+    """Walmart's search results from the page's __NEXT_DATA__ JSON. The HTML cards are not enough: a search
+    with a single result has no repeated card for the generic extractor to find. Only the first item stack
+    is read; later ones are "Other options to consider", not results."""
+    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.S)
+    try:
+        stacks = json.loads(m.group(1))["props"]["pageProps"]["initialData"]["searchResult"]["itemStacks"]
+    except Exception:
+        return []
+    out = []
+    for it in (stacks[0].get("items") or []) if stacks else []:
+        if it.get("__typename") != "Product" or not it.get("name"):
+            continue
+        price = it.get("price")
+        info = it.get("priceInfo") or {}
+        bits = ["SPONSORED"] if it.get("isSponsoredFlag") else []
+        if it.get("sellerName") and it["sellerName"] != "Walmart.com":
+            bits.append(f'sold by {it["sellerName"]}')
+        if info.get("wasPrice"):
+            bits.append(f'was {info["wasPrice"]}')
+        avail = (it.get("availabilityStatusV2") or {}).get("display")
+        if avail and avail != "In stock":
+            bits.append(avail)
+        out.append({
+            "title": clean(it["name"]),
+            "price": float(price) if price else None,
+            "price_text": info.get("linePriceDisplay") or info.get("linePrice") or (f"${price:,.2f}" if price else ""),
+            "url": tidy_url(urljoin(base_url, it.get("canonicalUrl") or f'/ip/{it.get("usItemId")}')),
             "details": " · ".join(bits),
         })
     return out

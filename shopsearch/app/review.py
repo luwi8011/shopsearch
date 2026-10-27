@@ -108,7 +108,7 @@ async def review(want: str, limits: str, new: list[dict], known: list[dict], pho
             text = await _ask(prompt)
         verdicts = _parse(text)
         if not verdicts:
-            raise ValueError("LLM reply had no usable JSON")
+            raise ValueError(f"LLM reply had no usable JSON: {text.strip()[:150]!r}")
         for n in range(1, len(chunk) + 1):
             v = verdicts.get(f"new-{n}") or verdicts.get(str(n))
             if v is None:

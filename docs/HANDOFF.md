@@ -58,17 +58,23 @@ Home Assistant request "Send" button ────┤  (polled every 5 s)
   - The tier that worked is remembered per domain.
   - Politeness: at least 2.5 s between requests to one domain, and a 10-minute page cache.
 - **sites.py**: store "recipes" (search URL template, optional CSS selectors, price-sort parameter,
-  preferred tier) and the build of search URLs:
+  preferred tier, `no_results` regex for the store's own "nothing matched" page) and the build of search URLs:
+  - `no_results` lets a search report "the site found nothing" instead of FAILED, and keeps the suggested
+    products Newegg/Walmart put on that page out of the results. A store without it can't tell an empty search
+    from a layout the extractor no longer reads.
   - Filters: price, condition, Craigslist postal/radius, Facebook location/radius.
   - Unknown stores: their search URL is found by discovery (schema.org SearchAction, GET search forms,
     Shopify/Woo/Magento/BigCommerce defaults) and cached.
 - **extract.py**: turns pages into listings, in three layers: recipe selectors, JSON-LD, then a generic
-  "repeated card with a price and a link" heuristic, plus a custom Facebook parser.
+  "repeated card with a price and a link" heuristic, plus custom Facebook and Walmart (`__NEXT_DATA__` JSON;
+  the generic layer can't see a single-result page) parsers.
   - It skips struck-through, list, was and save prices and shipping amounts.
-  - `relevance()`: the share of query words in the title, with words that contain digits mandatory.
+  - `relevance()`: the share of query words in the title, with words that contain digits mandatory and a
+    region suffix on a model number (U6-IW-US) optional.
   - `product_details()` for product pages, and `page_markdown()` for size-capped page text.
 - **ebay_api.py**: eBay Browse API client (OAuth client credentials), used for `ebay` when keys are set and
   always for `ebay-local` (pickup filters: `deliveryOptions:{SELLER_ARRANGED_LOCAL_PICKUP}` + pickup ZIP/radius).
+  Always sends `buyingOptions:{FIXED_PRICE|AUCTION}`: by default the API drops an auction once it has a bid.
 - **health.py**: daily canary search per built-in store (`canary` in sites.py); two empty results in a row notify
   the default phone, recovery notifies again. State in `health.json`, shown by `GET /health`.
 - **watches.py**: hunts and searches, the scheduler loop, change detection (new listings and price

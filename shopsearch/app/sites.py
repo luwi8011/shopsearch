@@ -27,6 +27,9 @@ LEARNED_FILE = os.path.join(DATA_DIR, "learned_sites.json")
 
 # {q} is the URL-encoded query. {min}/{max} are filled only when given.
 # canary: a search that always has listings, run daily by health.py to notice a store that stops working.
+# no_results: a regex that matches the page only when the store itself says nothing matched. Without it, an
+# empty search can't be told from a layout the extractor no longer reads; Newegg and Walmart also fill a
+# no-results page with suggested products, which would otherwise be counted as results.
 SITES: dict[str, dict] = {
     "amazon": {
         "name": "Amazon", "domain": "amazon.com",
@@ -90,6 +93,7 @@ SITES: dict[str, dict] = {
         "price": ".price",
         "link": "a[href]",
         "kind": "local", "canary": "chair",
+        "no_results": r'(?s)<ol class="cl-static-search-results">\s*(?:<li class="cl-static-hub-links">(?:(?!<li\b).)*)?</ol>',
     },
     "facebook": {
         "name": "Facebook Marketplace", "domain": "facebook.com",
@@ -98,12 +102,15 @@ SITES: dict[str, dict] = {
         "parser": "facebook",
         "prefer": "http:safari",
         "kind": "local", "canary": "chair",
+        "no_results": r'"__typename":"MarketplaceSearchFeedNoResults"',
     },
     "walmart": {
         "name": "Walmart", "domain": "walmart.com",
         "search": "https://www.walmart.com/search?q={q}",
         "price_sort": "&sort=price_low",
+        "parser": "walmart",
         "kind": "retail", "canary": "usb c cable",
+        "no_results": r'"aggregatedCount":0[,}]',
     },
     "newegg": {
         "name": "Newegg", "domain": "newegg.com",
@@ -114,6 +121,7 @@ SITES: dict[str, dict] = {
         "price": ".price-current",
         "link": "a.item-title",
         "kind": "retail", "canary": "usb c cable",
+        "no_results": r"We have found 0 items that match",
     },
     "gunbroker": {
         "name": "GunBroker", "domain": "gunbroker.com",

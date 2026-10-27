@@ -39,7 +39,9 @@ async def _get_token(c: httpx.AsyncClient) -> str:
 async def search(query: str, *, price_sort=False, min_price=None, max_price=None, condition=None, limit=50,
                  pickup_radius_mi: int | None = None) -> list[dict]:
     """pickup_radius_mi: only listings the seller lets you pick up within this many miles of HOME_ZIP."""
-    filters = []
+    # Without buyingOptions the API returns only listings that still have Buy It Now, so an auction drops out
+    # as soon as it gets its first bid. Cheap used gear is mostly in those auctions.
+    filters = ["buyingOptions:{FIXED_PRICE|AUCTION}"]
     if min_price is not None or max_price is not None:
         lo = f"{min_price:g}" if min_price is not None else ""
         hi = f"{max_price:g}" if max_price is not None else ""
@@ -53,11 +55,10 @@ async def search(query: str, *, price_sort=False, min_price=None, max_price=None
             raise ValueError("local pickup needs a home ZIP code (home_zip)")
         filters += ["deliveryOptions:{SELLER_ARRANGED_LOCAL_PICKUP}", "pickupCountry:US", f"pickupPostalCode:{ZIP}",
                     f"pickupRadius:{pickup_radius_mi}", "pickupRadiusUnit:mi"]
-    params = {"q": query, "limit": str(limit)}
-    if filters:
-        params["filter"] = ",".join(filters)
+    params = {"q": query, "limit": str(limit), "filter": ",".join(filters)}
     if price_sort:
-        params["sort"] = "price"
+        # The cheapest 50 are mostly accessories that the relevance filter drops; 200 is the API's page maximum.
+        params.update(sort="price", limit=str(max(limit, 200)))
     headers = {"X-EBAY-C-MARKETPLACE-ID": "EBAY_US"}
     if ZIP:
         headers["X-EBAY-C-ENDUSERCTX"] = f"contextualLocation=country=US,zip={ZIP}"

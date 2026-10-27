@@ -427,7 +427,9 @@ class Watches:
             baseline = w["last_check"] is None
             new, drops = [], []
             for r in results:
-                if r["items"]:  # a site that failed this time keeps its listings as "still listed"
+                # A site that failed this time keeps its listings as "still listed"; one that answered
+                # "no results" doesn't.
+                if r["items"] or r.get("empty"):
                     w["store_ok"][r["name"]] = t
             for store, i in rows:
                 url, price = i["url"], i.get("price")

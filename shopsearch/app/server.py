@@ -86,6 +86,10 @@ mcp = FastMCP(
 def _parse(recipe: dict, html: str, url: str) -> list[dict]:
     if recipe.get("parser") == "facebook":
         return extract.facebook_listings(html)
+    if recipe.get("parser") == "walmart":
+        items = extract.walmart_listings(html, url)
+        if items:
+            return items
     items = extract.recipe_listings(html, url, recipe) if recipe.get("card") else []
     if not items:
         items = extract.generic_listings(html, url)
@@ -123,17 +127,25 @@ async def _search_with_recipe(key: str, recipe: dict, query: str, opts: dict) ->
     if not page.ok:
         res["error"] = page.error or f"HTTP {page.status}"
         return res
-    items = _parse(recipe, page.html, page.url)
-    if not items and page.tier != "browser" and recipe.get("parser") != "facebook":
+    empty = _no_results(recipe, page.html)
+    items = [] if empty else _parse(recipe, page.html, page.url)
+    if not items and not empty and page.tier != "browser" and recipe.get("parser") != "facebook":
         # The page may build its results with JavaScript; render it.
         p2 = await F.fetch(url, mode="browser")
         if p2.ok:
-            items = _parse(recipe, p2.html, p2.url)
+            empty = _no_results(recipe, p2.html)
+            items = [] if empty else _parse(recipe, p2.html, p2.url)
             res["tier"], res["seconds"] = "browser", round(page.seconds + p2.seconds, 1)
-    res["items"] = items
-    if not items:
-        res["error"] = "page loaded but no product listings were found on it (no results, or an unrecognised layout)"
+    res["items"], res["empty"] = items, empty
+    if not items and not empty:
+        res["error"] = ("page loaded but no listings could be read from it (an unrecognised layout, or a "
+                        "no-results page this store's recipe doesn't recognise)")
     return res
+
+
+def _no_results(recipe: dict, html: str) -> bool:
+    """The store's own "nothing matched" page (recipe no_results); its suggested products are not results."""
+    return bool(recipe.get("no_results") and re.search(recipe["no_results"], html or ""))
 
 
 async def _discover_and_search(host: str, query: str, opts: dict) -> dict:
@@ -238,6 +250,8 @@ async def collect(query: str, site_list: list[str], *, max_price=None, min_price
             rows.append((r["name"], i))
         if r["error"] and not kept:
             status.append(f"- {r['name']}: FAILED - {r['error']}")
+        elif r.get("empty"):
+            status.append(f"- {r['name']}: no listings - the site itself found nothing for this search ({r['tier']}, {r['seconds']}s)")
         else:
             note = f", {dropped} off-topic/out-of-range dropped" if dropped else ""
             status.append(f"- {r['name']}: {len(kept)} shown of {total} listings{note} ({r['tier']}, {r['seconds']}s)")

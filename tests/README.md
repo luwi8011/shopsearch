@@ -7,6 +7,7 @@ Locally (Python 3.12 with `httpx` and `websockets`), from the repo root:
 
     APP_DIR=shopsearch/app python tests/test_hunts.py
     APP_DIR=shopsearch/app python tests/test_routing.py
+    APP_DIR=shopsearch/app python tests/test_store_pages.py   # needs the app's dependencies (imports server.py)
     APP_DIR=shopsearch/app LLM_URL=http://<llm>/v1 LLM_MODEL=<model> python tests/test_review_live.py   # real LLM, ~30-60 s
 
 Inside a plain-Docker container:

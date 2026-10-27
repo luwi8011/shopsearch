@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.3
+
+- eBay (official API) finds auctions again. The API leaves out an auction as soon as it gets a bid, so the
+  cheapest listings were missing. Price-sorted eBay searches read 200 listings instead of 50.
+- Walmart searches with one result (often an exact model number) work; they used to fail.
+- When Craigslist, Facebook, Walmart or Newegg says nothing matched, the search reports "the site itself found
+  nothing" instead of FAILED, and Newegg's suggested products on that page no longer count as results.
+- A model number with a region suffix (U6-IW-US) matches store titles that leave it off (U6-IW).
+- A failed LLM review now logs the start of the model's reply.
+
 ## 1.2.2
 
 - The API key check ignores stray spaces and the case of "Bearer", and the log now says why a request was refused
