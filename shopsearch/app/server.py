@@ -36,6 +36,7 @@ from starlette.responses import JSONResponse, PlainTextResponse  # noqa: E402
 import agent  # noqa: E402
 import ebay_api  # noqa: E402
 import extract  # noqa: E402
+import health  # noqa: E402
 import review  # noqa: E402
 import sites  # noqa: E402
 import watches  # noqa: E402
@@ -48,7 +49,8 @@ _fh = logging.handlers.RotatingFileHandler(os.path.join(os.environ.get("DATA_DIR
                                            maxBytes=2_000_000, backupCount=3)
 _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
 _fh.setLevel(logging.INFO)
-for _name in ("shopsearch.watch", "shopsearch.ha", "shopsearch.agent", "shopsearch.review", "shopsearch.requests"):
+for _name in ("shopsearch.watch", "shopsearch.ha", "shopsearch.agent", "shopsearch.review", "shopsearch.requests",
+              "shopsearch.health"):
     logging.getLogger(_name).addHandler(_fh)
 log = logging.getLogger("shopsearch")
 
@@ -96,12 +98,18 @@ def _parse(recipe: dict, html: str, url: str) -> list[dict]:
 
 
 async def _search_with_recipe(key: str, recipe: dict, query: str, opts: dict) -> dict:
-    if key == "ebay" and ebay_api.enabled():
+    if recipe.get("api") == "ebay" or (key == "ebay" and ebay_api.enabled()):
         t = time.time()
-        res = {"site": key, "name": "eBay", "url": "", "tier": "official API", "seconds": 0.0, "items": [], "error": ""}
+        res = {"site": key, "name": recipe["name"], "url": "", "tier": "official API", "seconds": 0.0, "items": [],
+               "error": ""}
+        if not ebay_api.enabled():
+            res["error"] = "needs the eBay API keys (ebay_client_id / ebay_client_secret in the settings)"
+            return res
+        pickup = (opts["radius_mi"] or sites.LOCAL_RADIUS_MI) if recipe.get("pickup") else None
         try:
             res["items"] = await ebay_api.search(query, price_sort=opts["price_sort"], min_price=opts["min_price"],
-                                                 max_price=opts["max_price"], condition=opts["condition"])
+                                                 max_price=opts["max_price"], condition=opts["condition"],
+                                                 pickup_radius_mi=pickup)
         except Exception as e:
             res["error"] = f"eBay API error: {type(e).__name__}: {str(e)[:200]}"
         res["seconds"] = round(time.time() - t, 1)
@@ -349,7 +357,7 @@ _SHOP_DESC = (
     "    max_price: Drop listings above this price (USD).\n"
     "    min_price: Drop listings below this price; useful to skip cheap accessories that match the words.\n"
     '    condition: "any", "new", or "used" (applied where the site supports it: eBay, Facebook).\n'
-    f"    radius_miles: Pickup distance for craigslist and facebook (default {sites.LOCAL_RADIUS_MI}). "
+    f"    radius_miles: Pickup distance for craigslist, facebook and ebay-local (default {sites.LOCAL_RADIUS_MI}). "
     "Raise it (e.g. 60-100) for bigger or rarer items.\n"
     "    sort_on_site_by_price: Ask each site for its own lowest-price sort instead of its relevance sort. "
     "Relevance (default) gives better matches; the table is sorted by price either way.\n"
@@ -423,6 +431,8 @@ async def _watch_search(p: dict):
 
 
 W = watches.Watches(_watch_search)
+H = health.Health(lambda key, query: _search_site(key, query, {"price_sort": False, "min_price": None, "max_price": None,
+                                                               "radius_mi": None, "condition": None}))
 
 
 def _describe(w: dict) -> str:
@@ -704,8 +714,9 @@ async def request_loop():
 # ---------------------------------------------------------------- REST mirrors
 
 @mcp.custom_route("/health", methods=["GET"])
-async def health(_: Request):
-    return JSONResponse({"ok": True, "searxng": SEARXNG_URL, "default_sites": DEFAULT_SITES, "sites": list(sites.SITES)})
+async def api_health(_: Request):
+    return JSONResponse({"ok": True, "searxng": SEARXNG_URL, "default_sites": DEFAULT_SITES, "sites": list(sites.SITES),
+                         "stores": H.summary()})
 
 
 @mcp.custom_route("/api/search", methods=["GET"])
@@ -785,7 +796,7 @@ async def main():
     server.capture_signals = contextlib.nullcontext
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, server.handle_exit, sig, None)
-    tasks = [asyncio.create_task(W.loop()), asyncio.create_task(request_loop())]
+    tasks = [asyncio.create_task(W.loop()), asyncio.create_task(request_loop()), asyncio.create_task(H.loop())]
     try:
         await server.serve()
     finally:

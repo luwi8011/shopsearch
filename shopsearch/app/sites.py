@@ -26,6 +26,7 @@ DATA_DIR = os.environ.get("DATA_DIR", "/data")
 LEARNED_FILE = os.path.join(DATA_DIR, "learned_sites.json")
 
 # {q} is the URL-encoded query. {min}/{max} are filled only when given.
+# canary: a search that always has listings, run daily by health.py to notice a store that stops working.
 SITES: dict[str, dict] = {
     "amazon": {
         "name": "Amazon", "domain": "amazon.com",
@@ -36,7 +37,7 @@ SITES: dict[str, dict] = {
         "price": ".a-price:not(.a-text-price) .a-offscreen||.a-price .a-offscreen",
         "link": 'a[href*="/dp/"]||a.a-link-normal',
         "sponsored": '.puis-sponsored-label-text, a[aria-label*="Sponsored"]',
-        "kind": "retail",
+        "kind": "retail", "canary": "usb c cable",
     },
     "ebay": {
         "name": "eBay", "domain": "ebay.com",
@@ -47,7 +48,13 @@ SITES: dict[str, dict] = {
         "price": ".s-card__price||.s-item__price",
         "link": "a.s-card__link||a.s-item__link||a[href*='/itm/']",
         "skip_title": r"^Shop on eBay",
-        "kind": "marketplace",
+        "kind": "marketplace", "canary": "usb c cable",
+    },
+    # Official API only (needs EBAY_CLIENT_ID/SECRET): listings the seller lets you pick up within
+    # radius_miles of HOME_ZIP. No canary: an empty result can be genuine in a small area.
+    "ebay-local": {
+        "name": "eBay local pickup", "domain": "ebay.com", "api": "ebay", "pickup": True,
+        "kind": "local",
     },
     "psa": {
         "name": "Palmetto State Armory", "domain": "palmettostatearmory.com",
@@ -58,7 +65,7 @@ SITES: dict[str, dict] = {
         "price": '[data-price-type="finalPrice"]||.price',
         "link": "a.product-item-link",
         "prefer": "browser",  # Cloudflare challenge on every request
-        "kind": "retail",
+        "kind": "retail", "canary": "magazine",
     },
     "dahlonega": {
         "name": "Dahlonega Armory", "domain": "dahlonegaarmory.com",
@@ -67,12 +74,12 @@ SITES: dict[str, dict] = {
         "title": ".product-title",
         "price": ".product-price",
         "link": "a[href]",
-        "kind": "retail",
+        "kind": "retail", "canary": "trigger",
     },
     "mxlocker": {
         "name": "MX Locker", "domain": "mxlocker.com",
         "search": "https://mxlocker.com/search?keyword={q}",
-        "kind": "marketplace",
+        "kind": "marketplace", "canary": "helmet",
     },
     "craigslist": {
         "name": "Craigslist", "domain": "craigslist.org",
@@ -82,7 +89,7 @@ SITES: dict[str, dict] = {
         "title": ".title",
         "price": ".price",
         "link": "a[href]",
-        "kind": "local",
+        "kind": "local", "canary": "chair",
     },
     "facebook": {
         "name": "Facebook Marketplace", "domain": "facebook.com",
@@ -90,13 +97,13 @@ SITES: dict[str, dict] = {
         "price_sort": "&sortBy=price_ascend",
         "parser": "facebook",
         "prefer": "http:safari",
-        "kind": "local",
+        "kind": "local", "canary": "chair",
     },
     "walmart": {
         "name": "Walmart", "domain": "walmart.com",
         "search": "https://www.walmart.com/search?q={q}",
         "price_sort": "&sort=price_low",
-        "kind": "retail",
+        "kind": "retail", "canary": "usb c cable",
     },
     "newegg": {
         "name": "Newegg", "domain": "newegg.com",
@@ -106,19 +113,19 @@ SITES: dict[str, dict] = {
         "title": ".item-title",
         "price": ".price-current",
         "link": "a.item-title",
-        "kind": "retail",
+        "kind": "retail", "canary": "usb c cable",
     },
     "gunbroker": {
         "name": "GunBroker", "domain": "gunbroker.com",
         "search": "https://www.gunbroker.com/All/search?Keywords={q}",
         "price_sort": "&Sort=4",
-        "kind": "marketplace",
+        "kind": "marketplace", "canary": "magazine",
     },
     "aliexpress": {
         "name": "AliExpress", "domain": "aliexpress.us",
         "search": "https://www.aliexpress.us/w/wholesale-{q_dash}.html",
         "price_sort": "?sortType=price_asc",
-        "kind": "retail",
+        "kind": "retail", "canary": "usb c cable",
     },
 }
 
@@ -126,7 +133,7 @@ ALIASES = {
     "palmetto": "psa", "palmettostatearmory": "psa", "palmetto state armory": "psa",
     "dahlonega armory": "dahlonega", "mx locker": "mxlocker", "fb": "facebook",
     "marketplace": "facebook", "facebook marketplace": "facebook", "cl": "craigslist",
-    "ali": "aliexpress",
+    "ali": "aliexpress", "ebay local": "ebay-local", "ebay local pickup": "ebay-local",
 }
 
 

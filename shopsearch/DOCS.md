@@ -28,7 +28,7 @@ has your model review new listings, and sends the good ones to your phone.
 | Default phone | Notify service without `notify.` (e.g. `mobile_app_pixel_8`), for hunts nobody owns. |
 | Dashboard | URL path of a dashboard (sections view) that gets a "Shop Watches" section and a page per hunt. Empty leaves dashboards alone. The add-on rewrites that section and the `shop-*` pages; don't edit them by hand. |
 | SearXNG URL | Enables `web_search`. |
-| eBay client ID / secret | Production keys from developer.ebay.com; eBay then uses the official API instead of scraping. |
+| eBay client ID / secret | Production keys from developer.ebay.com (Application Keys; for account-deletion notices choose the "not persisting eBay data" opt-out). eBay then uses the official API instead of scraping, and the `ebay-local` site (listings you can pick up nearby) works. |
 | Browser pages | Pages the stealth browser loads at once (default 3). |
 
 ## Connect Open WebUI

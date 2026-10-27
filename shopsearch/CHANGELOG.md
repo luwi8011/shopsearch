@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+- Store health: a daily test search per built-in store; your default phone hears when a store stops returning
+  listings and when it works again. `GET /health` shows each store.
+- eBay official API tested with real keys. New site `ebay-local`: eBay listings you can pick up within the
+  pickup radius (needs the eBay keys).
+
 ## 1.0.1
 
 - Review: a "false" answer given as text no longer counts as a match.

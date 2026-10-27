@@ -27,7 +27,7 @@ About the user: {profile}
 Local pickup (craigslist/facebook): the default radius_miles is {radius}. For big or rare items (vehicles, machinery, rare parts) raise radius_miles to 60-150.
 
 How to work:
-1. Pick sites that actually sell this kind of item. Known sites: {sites}. Local/used: craigslist, facebook. Any other store works by domain.
+1. Pick sites that actually sell this kind of item. Known sites: {sites}. Local/used: craigslist, facebook, ebay-local (eBay listings you can pick up locally; good for vehicles and machinery). Any other store works by domain.
 2. Every word containing a digit in a query (model numbers like 2853-20, ar15, 1236) must appear in a listing's title or the listing is dropped, so put at most ONE model number in a query; make a separate search per model number instead. Try 1-3 shop_search calls to find query wording that returns the right listings (titles as sellers write them, model numbers). Look at what comes back.
 3. Create ONE hunt for the request: call create_search once per useful variation (different wording, model numbers, or site sets), all with the same `hunt` name, max 4 searches. Write `want` precisely for the whole hunt (not one site or variation): what counts as a match and what does not (e.g. whole item vs parts). It is set by the first search of a hunt; later searches keep it. Use every_hours 4-6 for craigslist/facebook, 12-24 for stores. Put price limits the user gave into max_price/min_price.
 4. If list_hunts shows a hunt for the same goal already, add searches to it (same hunt name) instead of starting another.

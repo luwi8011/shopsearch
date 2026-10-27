@@ -35,7 +35,9 @@ async def _get_token(c: httpx.AsyncClient) -> str:
     return _token[0]
 
 
-async def search(query: str, *, price_sort=False, min_price=None, max_price=None, condition=None, limit=50) -> list[dict]:
+async def search(query: str, *, price_sort=False, min_price=None, max_price=None, condition=None, limit=50,
+                 pickup_radius_mi: int | None = None) -> list[dict]:
+    """pickup_radius_mi: only listings the seller lets you pick up within this many miles of HOME_ZIP."""
     filters = []
     if min_price is not None or max_price is not None:
         lo = f"{min_price:g}" if min_price is not None else ""
@@ -45,6 +47,11 @@ async def search(query: str, *, price_sort=False, min_price=None, max_price=None
         filters.append("conditions:{NEW}")
     elif condition == "used":
         filters.append("conditions:{USED}")
+    if pickup_radius_mi:
+        if not ZIP:
+            raise ValueError("local pickup needs a home ZIP code (home_zip)")
+        filters += ["deliveryOptions:{SELLER_ARRANGED_LOCAL_PICKUP}", "pickupCountry:US", f"pickupPostalCode:{ZIP}",
+                    f"pickupRadius:{pickup_radius_mi}", "pickupRadiusUnit:mi"]
     params = {"q": query, "limit": str(limit)}
     if filters:
         params["filter"] = ",".join(filters)

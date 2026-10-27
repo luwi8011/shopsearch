@@ -23,7 +23,8 @@ belong in a git-ignored `LOCAL.md`, never in the repo: it is public.
 Persistent state lives in `/data` (the add-on's data folder, included in HA backups except the browser
 profile and logs): `watches.json` (hunts, searches, every listing seen, alert history), `tiers.json` (which
 fetch method works per site), `learned_sites.json` (auto-discovered search URLs), `browser-profile/`
-(Chromium cookies) and `shopsearch.log` (watch, Home Assistant and agent events, rotated).
+(Chromium cookies), `health.json` (daily store test results) and `shopsearch.log` (watch, Home Assistant, agent
+and store-health events, rotated).
 
 Releasing: bump `version` in `shopsearch/config.yaml`, add a `shopsearch/CHANGELOG.md` entry, and get it onto
 `main` (day-to-day pushes go to branch `work`; fast-forward `main` to release). Home Assistant then offers the
@@ -65,7 +66,10 @@ Home Assistant request "Send" button ────┤  (polled every 5 s)
   - It skips struck-through, list, was and save prices and shipping amounts.
   - `relevance()`: the share of query words in the title, with words that contain digits mandatory.
   - `product_details()` for product pages, and `page_markdown()` for size-capped page text.
-- **ebay_api.py**: eBay Browse API client (OAuth client credentials). Inactive and untested; it needs keys.
+- **ebay_api.py**: eBay Browse API client (OAuth client credentials), used for `ebay` when keys are set and
+  always for `ebay-local` (pickup filters: `deliveryOptions:{SELLER_ARRANGED_LOCAL_PICKUP}` + pickup ZIP/radius).
+- **health.py**: daily canary search per built-in store (`canary` in sites.py); two empty results in a row notify
+  the default phone, recovery notifies again. State in `health.json`, shown by `GET /health`.
 - **watches.py**: hunts and searches, the scheduler loop, change detection (new listings and price
   drops), review gating, alert recording and `sync_ha()`, which makes Home Assistant match the state.
 - **review.py**: the LLM judge. For each new listing it decides match or no match, whether it is a
@@ -111,8 +115,9 @@ Home Assistant request "Send" button ────┤  (polled every 5 s)
 - Auto-discovered: Brownells and MidwayUSA.
 
 **Blocked or broken:**
-- **eBay** (Akamai): it hard-blocked scripted access from the home IP after a burst of ~20 test requests on
-  2026-10-22, and it is intermittently blocked since. The durable fix is the official API (see ROADMAP).
+- **eBay scraping** (Akamai): it hard-blocked scripted access from the home IP after a burst of ~20 test requests on
+  2026-10-22, and it is intermittently blocked since. With API keys set, eBay goes through the official API instead
+  (working since 2026-10-27).
 - **Home Depot, Lowe's** (Akamai): they refuse even the browser, so they were removed from the built-in list.
 - **primaryarms.com**: search URL discovery fails.
 

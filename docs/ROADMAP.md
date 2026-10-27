@@ -5,15 +5,8 @@ settings moved to add-on options, API key on the MCP server.
 
 ## Pending from earlier work
 
-- **eBay official API.** `app/ebay_api.py` is written but untested.
-  - An App ID exists (Production keyset, in `.env`), but no Cert ID/secret yet.
-  - The eBay developer portal requires a "Marketplace Account Deletion" endpoint before it unlocks the
-    keyset. The intended path is the opt-out toggle ("Not persisting eBay data"), because this app
-    stores no eBay user data, only public listings.
-  - Once keys work: test it, then add a local-pickup filter (pickupPostalCode/pickupRadius), which
-    matters for vehicles and machinery.
-  - Until then, eBay scraping is intermittently blocked by Akamai. Consider leaving eBay out of
-    frequent hunts.
+- **eBay official API**: done in 1.1.0 (Browse API with the user's Production keyset, plus `ebay-local` for
+  local pickup). Next: eBay sold listings for "typical price" (Marketplace Insights API needs separate approval).
 - **Hunt pages** in Home Assistant were verified only through template rendering, not visually on a phone.
 
 ## Making it usable by other people
@@ -39,8 +32,6 @@ settings moved to add-on options, API key on the MCP server.
   until 30 days after it was last seen; listings that sold or vanished are dropped then. Add per-hunt charts,
   keep gone listings' last prices, and add sold-price data (eBay sold listings) so the reviewer can say
   "$400 below typical".
-- **Store health checks.** Run a daily known search per store and flag when a layout change silently
-  drops results to zero.
 - **Saved HTML fixtures per store** for automated extraction tests.
 - **Better Facebook coverage.** Logged out, it sees only ~15–24 listings. Options: login cookies, or more
   frequent checks of a newest-first search.

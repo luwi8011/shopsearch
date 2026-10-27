@@ -1,5 +1,5 @@
 name: Shop Search
-version: "1.0.1"
+version: "1.1.0"
 slug: shopsearch
 description: Price research and deal hunts for a local LLM, with phone alerts through Home Assistant
 url: https://github.com/luwi8011/shopsearch

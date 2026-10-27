@@ -52,7 +52,13 @@ The method that worked for each domain is saved in `tiers.json`. Requests to one
 
 Built in: amazon, ebay, psa, dahlonega, mxlocker, craigslist and facebook (local pickup around your ZIP /
 Marketplace location, default radius from the settings; the model can pass `radius_miles` per search;
-Facebook logged out shows about 10 to 24 newest listings), walmart, newegg, gunbroker, aliexpress.
+Facebook logged out shows about 10 to 24 newest listings), ebay-local (eBay listings you can pick up within
+that radius; needs the eBay API keys), walmart, newegg, gunbroker, aliexpress.
+
+Store health (app/health.py): once a day each built-in store gets a test search that always has results. Two
+empty ones in a row send "Shop Search: <store> stopped working" to the default phone, so a layout change or a
+block doesn't leave hunts quietly finding nothing; you get "works again" when it recovers. `GET /health` shows
+each store's state.
 
 Any other store: pass its domain. The search URL is found from the homepage (schema.org SearchAction, the
 search form, or Shopify/Woo/Magento/BigCommerce defaults) and saved in `learned_sites.json`. If that fails,
@@ -91,9 +97,9 @@ Everything is rebuilt from the add-on's own state by `Watches.sync_ha()`; see
 
 ## Known limits
 
-- **eBay** (Akamai) blocks scripted access from a home IP after bursts of requests. Durable fix: free eBay
-  developer keys (settings `ebay_client_id`/`ebay_client_secret`), which switch eBay to the official Browse
-  API. That code path (`app/ebay_api.py`) is untested until keys exist.
+- **eBay** (Akamai) blocks scraping from a home IP after bursts of requests. With free eBay developer keys
+  (settings `ebay_client_id`/`ebay_client_secret`, Production keyset; in eBay's portal pick the "not persisting
+  eBay data" opt-out for account-deletion notices) eBay uses the official Browse API instead (5,000 calls/day).
 - **Home Depot / Lowe's** (Akamai) refuse both HTTP and the headless browser.
 - **Amazon** bans most firearm parts, so gun-part searches there return accessories.
 - **Facebook Marketplace** without login shows only the first batch of results.
