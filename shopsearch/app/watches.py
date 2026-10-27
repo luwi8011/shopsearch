@@ -13,6 +13,7 @@ in Home Assistant is reconciled from this state by sync_ha().
 
 import asyncio
 import datetime
+import hashlib
 import json
 import logging
 import os
@@ -36,6 +37,15 @@ HA_POLL_S = 30          # how often the Home Assistant switches are checked
 HA_TIDY_S = 600         # how often orphan helpers are removed and missing ones created
 MISSING_POLLS = 3       # a switch must be missing this many polls in a row (HA running) to end its hunt
 REVIEW_RETRY_S = 600    # listings still waiting for an LLM review (it failed, or arrived during one) are retried this often
+MAX_PAGES = 10          # listing pages opened per review (each can take seconds; photos slow the review too)
+MAX_NOTES = 3           # phone notifications per check; the rest are summed up in one more
+REJECTED_KEPT = 20      # "not interested" examples kept per hunt for the reviewer
+ACTION = "SHOPSEARCH"   # prefix of this app's notification button actions
+
+
+def listing_id(url: str) -> str:
+    """Short stable id of a listing, for notification tags and buttons."""
+    return hashlib.sha1(url.encode()).hexdigest()[:10]
 
 
 def ago(t: float | None) -> str:
@@ -67,9 +77,11 @@ def _norm(s: str) -> str:
 
 
 class Watches:
-    def __init__(self, search):
-        """search: async (params: dict) -> (rows [(store, item)], status lines, raw results)."""
+    def __init__(self, search, describe=None):
+        """search: async (params: dict) -> (rows [(store, item)], status lines, raw results).
+        describe: async (listing url) -> {"text", "photo"}, the listing's own page for the review (optional)."""
         self._search = search
+        self._describe = describe
         self._lock = asyncio.Lock()      # guards self.data and the file
         self._ha_lock = asyncio.Lock()   # one Home Assistant reconcile/change at a time
         self._running: set[str] = set()
@@ -484,13 +496,15 @@ class Watches:
                 pool = {}
                 for x in self.watches_in(h):
                     for u, rec in x["items"].items():
-                        if self.accepted(rec):
+                        if self.accepted(rec) or (rec.get("review") or {}).get("rejected"):
                             pool[u] = rec
                 known = sorted(pool.items(), key=lambda x: -x[1]["first_seen"])[:40]
                 w["review_tried"] = time.time()
+                photos = await self._read_pages(pending)
                 try:
                     verdicts = await review.review(h.get("want") or w["params"]["query"], self._limits(w),
-                                                   [rec for _, rec in pending], [rec for _, rec in known])
+                                                   [rec for _, rec in pending], [rec for _, rec in known],
+                                                   photos=photos, rejected=h.get("rejected"))
                 except Exception as e:
                     w["review_error"] = f"{type(e).__name__}: {e}"[:200]
                     log.warning("watch %s: review of %d listings failed, will retry: %s", w["id"], len(pending), e)
@@ -500,8 +514,10 @@ class Watches:
                     for (u, rec), v in zip(pending, verdicts):
                         orig = known[v["repost_of"]] if v["repost_of"] is not None else None
                         rec["review"] = {"match": v["match"], "note": v["note"], "repost_of": orig[0] if orig else None}
+                        if orig and orig[1]["review"].get("rejected"):
+                            rec["review"].update(match=False, note="Repost of a listing you marked not interested.")
                         # A repost at a lower price is really a price drop on the original listing.
-                        if orig and rec.get("price") is not None and orig[1].get("price") is not None \
+                        elif orig and rec.get("price") is not None and orig[1].get("price") is not None \
                                 and rec["price"] < orig[1]["price"] - 0.005 and not rec.get("baseline"):
                             rec.update(prev_price=orig[1]["price"], dropped_at=rec["first_seen"], drop_pending=True)
             elif pending:
@@ -564,9 +580,27 @@ class Watches:
 
     # ---------------------------------------------------------------- alerts
 
+    async def _read_pages(self, pending: list) -> list[str | None]:
+        """Open the pages of new listings that could alert (not a search's first-run baseline), so the review
+        sees the seller's description and main photo. The description is kept on the listing (rec["page"]);
+        the photo (data URL) only goes to this review. Returns the photos aligned with pending."""
+        photos: list[str | None] = [None] * len(pending)
+        if not self._describe:
+            return photos
+        todo = [n for n, (_, rec) in enumerate(pending) if not rec.get("baseline") and "page" not in rec][:MAX_PAGES]
+        for n in todo:
+            u, rec = pending[n]
+            try:
+                info = await self._describe(u)
+            except Exception as e:
+                log.info("listing page %s not read: %s: %s", u, type(e).__name__, e)
+                continue
+            rec["page"], photos[n] = info.get("text", ""), info.get("photo")
+        return photos
+
     async def _notify(self, h: dict, new: list, drops: list):
-        """Record the alert on the hunt's page and send one phone notification: each listing with the
-        LLM's comparison under it."""
+        """Record the alerts on the hunt's page and send one phone notification per listing (up to MAX_NOTES,
+        then one "+N more"), with the LLM's comparison and "Not interested" / "Stop hunt" buttons."""
         def money(p):
             return f"${p:,.0f}" if p is not None else "No price"
 
@@ -574,9 +608,10 @@ class Watches:
             return ", ".join(x for x in (rec.get("details", "").split(" · ")[0], rec["store"]) if x)
 
         now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-        entries = [{"t": now, "title": rec["title"][:120], "url": u, "price": money(rec.get("price")), "was": "",
-                    "where": where(rec), "note": (rec.get("review") or {}).get("note", "")} for u, rec in new]
-        entries += [{"t": now, "title": rec["title"][:120], "url": u, "price": money(rec["price"]),
+        entries = [{"t": now, "id": listing_id(u), "title": rec["title"][:120], "url": u,
+                    "price": money(rec.get("price")), "was": "", "where": where(rec),
+                    "note": (rec.get("review") or {}).get("note", "")} for u, rec in new]
+        entries += [{"t": now, "id": listing_id(u), "title": rec["title"][:120], "url": u, "price": money(rec["price"]),
                      "was": money(rec["prev_price"]), "where": where(rec),
                      "note": (rec.get("review") or {}).get("note", "")} for u, rec in drops]
         async with self._lock:
@@ -585,23 +620,71 @@ class Watches:
         if not (h.get("ha") and ha.enabled()):
             return
         await self._push_alerts(h)
-        targets = [r["service"] for r in h.get("recipients", [])] or ([ha.HA_NOTIFY] if ha.HA_NOTIFY else [])
+        targets = self.targets(h)
         if not targets:
             return
-
-        def entry(e: dict) -> str:
-            price = e["price"] + (f" (was {e['was']})" if e["was"] else "")
-            return f"{price} · {e['title'][:70]} ({e['where']})" + (f"\n→ {e['note']}" if e["note"] else "")
-
-        lines = [entry(e) for e in entries[:3]]
-        if len(entries) > 3:
-            lines.append(f"+{len(entries) - 3} more on the hunt's page in Home Assistant")
-        parts = []
-        if new:
-            parts.append(f"{len(new)} new match" + ("es" if len(new) > 1 else ""))
-        if drops:
-            parts.append(f"{len(drops)} price drop" + ("s" if len(drops) > 1 else ""))
         try:
-            await ha.notify(f"{h['label']}: {', '.join(parts)}", "\n\n".join(lines), entries[0]["url"], targets)
+            for e in entries[:MAX_NOTES]:
+                kind = "price drop" if e["was"] else "new match"
+                price = e["price"] + (f" (was {e['was']})" if e["was"] else "")
+                msg = f"{price} · {e['title'][:90]} ({e['where']})" + (f"\n→ {e['note']}" if e["note"] else "")
+                await ha.notify(f"{h['label']}: {kind}", msg, e["url"], targets, tag=f"shop_{e['id']}", actions=[
+                    {"action": f"{ACTION}_NO_{h['id']}_{e['id']}", "title": "Not interested"},
+                    {"action": f"{ACTION}_STOP_{h['id']}", "title": "Stop hunt", "destructive": True}])
+            if len(entries) > MAX_NOTES:
+                await ha.notify(f"{h['label']}: {len(entries) - MAX_NOTES} more",
+                                "More new listings and price drops are on the hunt's page in Home Assistant.",
+                                targets=targets)
         except Exception as e:
             log.warning("Home Assistant notify failed: %s", e)
+
+    def targets(self, h: dict) -> list[str]:
+        return [r["service"] for r in h.get("recipients", [])] or ([ha.HA_NOTIFY] if ha.HA_NOTIFY else [])
+
+    # ---------------------------------------------------------------- notification buttons
+
+    async def on_action(self, action: str):
+        """A notification button was pressed: "<ACTION>_NO_<hunt>_<listing id>" marks that listing not
+        interesting (and teaches the reviewer), "<ACTION>_STOP_<hunt>" ends the hunt."""
+        parts = action.split("_")
+        h = self.data["hunts"].get(parts[2]) if len(parts) > 2 else None
+        if h is None:
+            log.info("button %s: hunt no longer exists", action)
+            return
+        if parts[1] == "STOP":
+            await self.delete_hunt(h["id"], "stopped from a phone notification")
+            return
+        if parts[1] != "NO" or len(parts) != 4:
+            return
+        lid = parts[3]
+        async with self._lock:
+            found = [(u, rec) for w in self.watches_in(h) for u, rec in w["items"].items() if listing_id(u) == lid]
+            for _, rec in found:
+                rec.setdefault("review", {}).update(match=False, rejected=True)
+            if found:
+                u, rec = found[0]
+                h.setdefault("rejected", []).append({k: rec.get(k) for k in ("title", "price", "store", "details")})
+                del h["rejected"][:-REJECTED_KEPT]
+            for e in h.get("alerts", []):
+                if e.get("id") == lid:
+                    e["rejected"] = True
+            self._save()
+        log.info("hunt %s: listing %s marked not interested (%s)", h["id"], lid,
+                 found[0][1]["title"][:80] if found else "listing already forgotten")
+        try:
+            await self._push_alerts(h)
+            await ha.clear_notification(f"shop_{lid}", self.targets(h))
+        except Exception as e:
+            log.warning("hunt %s: after 'not interested': %s", h["id"], e)
+
+    async def action_loop(self):
+        """Listen for notification button presses (mobile_app_notification_action events) forever."""
+        if not ha.enabled():
+            return
+        async for ev in ha.events("mobile_app_notification_action"):
+            action = str((ev.get("data") or {}).get("action") or "")
+            if action.startswith(ACTION + "_"):
+                try:
+                    await self.on_action(action)
+                except Exception:
+                    log.exception("button %s failed", action)

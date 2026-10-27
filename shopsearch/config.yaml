@@ -1,7 +1,8 @@
 name: Shop Search
-version: "1.1.0"
+version: "1.2.0"
 slug: shopsearch
 description: Price research and deal hunts for a local LLM, with phone alerts through Home Assistant
+image: ghcr.io/luwi8011/shopsearch-{arch}
 url: https://github.com/luwi8011/shopsearch
 arch:
   - amd64

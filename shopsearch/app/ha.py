@@ -19,6 +19,7 @@ Needs HA_URL and HA_TOKEN; as a Home Assistant add-on they point at the Supervis
 HA_DASHBOARD is the url_path of the dashboard that gets the "Shop Watches" section (empty: none).
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -51,15 +52,41 @@ def _headers() -> dict:
     return {"Authorization": f"Bearer {HA_TOKEN}"}
 
 
-async def _ws(*calls: dict) -> list:
-    """Run WebSocket API calls on one authenticated connection; returns each call's result."""
-    out = []
-    async with websockets.connect(HA_WS_URL, max_size=8 * 1024 * 1024, open_timeout=15) as ws:
+async def _connect():
+    """An authenticated WebSocket API connection (use with `async with`)."""
+    ws = await websockets.connect(HA_WS_URL, max_size=8 * 1024 * 1024, open_timeout=15)
+    try:
         await ws.recv()  # auth_required
         await ws.send(json.dumps({"type": "auth", "access_token": HA_TOKEN}))
         msg = json.loads(await ws.recv())
         if msg.get("type") != "auth_ok":
             raise RuntimeError(f"Home Assistant auth failed: {msg.get('message', msg.get('type'))}")
+    except BaseException:
+        await ws.close()
+        raise
+    return ws
+
+
+async def events(event_type: str):
+    """Yield Home Assistant events of one type, forever; reconnects after errors and HA restarts."""
+    while True:
+        try:
+            async with await _connect() as ws:
+                await ws.send(json.dumps({"id": 1, "type": "subscribe_events", "event_type": event_type}))
+                log.info("listening for %s events", event_type)
+                async for raw in ws:
+                    msg = json.loads(raw)
+                    if msg.get("type") == "event":
+                        yield msg["event"]
+        except Exception as e:
+            log.info("event stream %s closed (%s: %s); reconnecting in 30 s", event_type, type(e).__name__, e)
+        await asyncio.sleep(30)
+
+
+async def _ws(*calls: dict) -> list:
+    """Run WebSocket API calls on one authenticated connection; returns each call's result."""
+    out = []
+    async with await _connect() as ws:
         for n, call in enumerate(calls, 1):
             await ws.send(json.dumps({"id": n, **call}))
             while True:
@@ -106,14 +133,27 @@ async def remove_state(entity_id: str):
     await _rest("DELETE", f"/api/states/{entity_id}")
 
 
-async def notify(title: str, message: str, url: str | None = None, targets: list[str] | None = None):
-    """Send to each notify service in targets (default: HA_NOTIFY)."""
-    data = {"title": title, "message": message}
+async def notify(title: str, message: str, url: str | None = None, targets: list[str] | None = None,
+                 tag: str | None = None, actions: list[dict] | None = None):
+    """Send to each notify service in targets (default: HA_NOTIFY). tag: lets a later notification replace or
+    clear this one. actions: Companion-app buttons ({"action", "title"}); a press fires a
+    mobile_app_notification_action event."""
+    extra = {"group": "shopsearch"}
     if url:
-        # iOS opens "url", Android "clickAction"
-        data["data"] = {"url": url, "clickAction": url, "group": "shopsearch"}
+        extra.update(url=url, clickAction=url)  # iOS opens "url", Android "clickAction"
+    if tag:
+        extra["tag"] = tag
+    if actions:
+        extra["actions"] = actions
+    data = {"title": title, "message": message, "data": extra}
     for t in targets or ([HA_NOTIFY] if HA_NOTIFY else []):
         await service("notify", t, data)
+
+
+async def clear_notification(tag: str, targets: list[str]):
+    """Remove a tagged notification from the phones."""
+    for t in targets:
+        await service("notify", t, {"message": "clear_notification", "data": {"tag": tag}})
 
 
 async def recipients_for_user(user_id: str | None, st: dict) -> list[dict]:
@@ -161,7 +201,7 @@ def _confirm(label: str) -> dict:
 ALERTS_MD = """{%- set a = state_attr('SENSOR', 'alerts') or [] -%}
 {%- if not a %}No alerts sent yet. New matches will show up here and on your phone.{% endif -%}
 {%- for i in a %}
-**[{{ i.title }}]({{ i.url }})**
+**[{{ i.title }}]({{ i.url }})**{% if i.rejected %} · *not interested*{% endif %}
 {{ i.price }}{% if i.was %} (was {{ i.was }}){% endif %} · {{ i.where }} · {{ (i.t | as_datetime | as_local).strftime('%b %-d, %-I:%M %p') }}
 {% if i.note %}→ {{ i.note }}{% endif %}
 {% endfor %}"""

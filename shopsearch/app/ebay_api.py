@@ -6,6 +6,7 @@ Get them at https://developer.ebay.com -> My Account -> Application Keys -> Prod
 
 import base64
 import os
+import re
 import time
 
 import httpx
@@ -90,3 +91,17 @@ async def search(query: str, *, price_sort=False, min_price=None, max_price=None
             "details": " · ".join(b for b in bits if b),
         })
     return out
+
+
+async def item(legacy_id: str, max_chars: int = 1000) -> dict:
+    """One listing's condition notes, item specifics and description, for the LLM review: {"text", "image"}."""
+    async with httpx.AsyncClient(timeout=25) as c:
+        r = await c.get("https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id",
+                        params={"legacy_item_id": legacy_id},
+                        headers={"X-EBAY-C-MARKETPLACE-ID": "EBAY_US", "Authorization": f"Bearer {await _get_token(c)}"})
+        r.raise_for_status()
+        it = r.json()
+    aspects = "; ".join(f"{a.get('name')}: {a.get('value')}" for a in (it.get("localizedAspects") or [])[:12])
+    desc = it.get("shortDescription") or re.sub(r"<[^>]+>", " ", it.get("description") or "")
+    parts = [it.get("condition", ""), it.get("conditionDescription", ""), aspects, re.sub(r"\s+", " ", desc).strip()]
+    return {"text": " | ".join(p for p in parts if p)[:max_chars], "image": (it.get("image") or {}).get("imageUrl")}

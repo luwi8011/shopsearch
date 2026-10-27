@@ -170,6 +170,31 @@ def product_details(html: str, url: str) -> dict:
     return {k: v for k, v in info.items() if v not in (None, "", "None")}
 
 
+def listing_page(html: str, max_chars: int = 1000) -> dict:
+    """What a seller wrote about one listing, for the LLM review: {"text": description and attributes,
+    "image": URL of the main photo or None}. Craigslist's posting body and attribute list, else the page's
+    JSON-LD/meta description (Facebook and most stores put the description there), else the page text."""
+    tree = LexborHTMLParser(html)
+    parts = []
+    attrs = [clean(a.text()) for a in tree.css(".attrgroup span")]
+    if attrs:
+        parts.append(" ".join(attrs))
+    body = tree.css_first("#postingbody")
+    if body is not None:
+        for junk in body.css(".print-information, .print-qrcode-container"):
+            junk.decompose()
+        parts.append(clean(body.text(deep=True, separator=" ")).removeprefix("QR Code Link to This Post").strip())
+    else:
+        desc = next((clean(p.get("description")) for p in jsonld_products(tree) if p.get("description")), "")
+        if not desc:
+            m = tree.css_first('meta[property="og:description"]') or tree.css_first('meta[name="description"]')
+            desc = clean(m.attributes.get("content")) if m else ""
+        parts.append(desc or page_markdown(html)[:max_chars])
+    img = tree.css_first('meta[property="og:image"]')
+    return {"text": " | ".join(p for p in parts if p)[:max_chars],
+            "image": (img.attributes.get("content") or None) if img else None}
+
+
 # ---------------------------------------------------------------- recipe extraction
 
 def _first_text(node, selectors: str | None) -> str:

@@ -18,8 +18,8 @@ import ha  # noqa: E402
 SENT = []
 
 
-async def _capture(title, message, url=None, targets=None):
-    SENT.append({"title": title, "message": message, "url": url, "targets": targets})
+async def _capture(title, message, url=None, targets=None, tag=None, actions=None):
+    SENT.append({"title": title, "message": message, "url": url, "targets": targets, "tag": tag, "actions": actions})
 
 
 async def _noop(*a, **k):
@@ -30,7 +30,7 @@ def stub_ha():
     """Pretend HA is connected; capture notifications instead of sending them."""
     ha.enabled = lambda: True
     ha.HA_NOTIFY = "mobile_app_default"
-    ha.notify, ha.set_state = _capture, _noop
+    ha.notify, ha.set_state, ha.clear_notification = _capture, _noop, _noop
 
 
 def fake_search(rounds):

@@ -14,6 +14,7 @@ With API_KEY set, every route except /health needs the header "Authorization: Be
 """
 
 import asyncio
+import base64
 import contextlib
 import hmac
 import logging
@@ -430,7 +431,39 @@ async def _watch_search(p: dict):
                          radius_miles=p.get("radius_miles"), per_site=40)
 
 
-W = watches.Watches(_watch_search)
+async def describe_listing(url: str) -> dict:
+    """One listing's own page for the reviewer: {"text": seller's description, "photo": data URL or None}.
+    eBay goes through the API when keys are set (scraping eBay item pages gets the IP blocked) and is skipped
+    otherwise."""
+    m = re.search(r"ebay\.com/itm/(\d+)", url)
+    if m:
+        if not ebay_api.enabled():
+            return {"text": "", "photo": None}
+        info = await ebay_api.item(m.group(1))
+    else:
+        page = await F.fetch(url)
+        if not page.ok:
+            raise RuntimeError(page.error or f"HTTP {page.status}")
+        info = extract.listing_page(page.html)
+    return {"text": info["text"], "photo": await _photo(info.get("image"))}
+
+
+async def _photo(url: str | None) -> str | None:
+    """The image as a data URL for the LLM (local servers can't be counted on to fetch URLs themselves)."""
+    if not url:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as c:
+            r = await c.get(url)
+    except httpx.HTTPError:
+        return None
+    ctype = r.headers.get("content-type", "").split(";")[0]
+    if r.status_code != 200 or not ctype.startswith("image/") or len(r.content) > 3_000_000:
+        return None
+    return f"data:{ctype};base64,{base64.b64encode(r.content).decode()}"
+
+
+W = watches.Watches(_watch_search, describe_listing)
 H = health.Health(lambda key, query: _search_site(key, query, {"price_sort": False, "min_price": None, "max_price": None,
                                                                "radius_mi": None, "condition": None}))
 
@@ -796,7 +829,7 @@ async def main():
     server.capture_signals = contextlib.nullcontext
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, server.handle_exit, sig, None)
-    tasks = [asyncio.create_task(W.loop()), asyncio.create_task(request_loop()), asyncio.create_task(H.loop())]
+    tasks = [asyncio.create_task(c) for c in (W.loop(), W.action_loop(), request_loop(), H.loop())]
     try:
         await server.serve()
     finally:
