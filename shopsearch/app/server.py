@@ -835,6 +835,7 @@ async def main():
     finally:
         for t in tasks:
             t.cancel()
+        await F.close()  # else Chromium's transport is cleaned up after the loop closed (a traceback on every stop)
 
 
 if __name__ == "__main__":

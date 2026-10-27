@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- No more traceback in the log when the add-on stops.
+
 ## 1.2.0
 
 - Before the review, new listings that could alert are opened: the model reads the seller's description and looks
