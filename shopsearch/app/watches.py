@@ -2,7 +2,7 @@
 
 A hunt is one goal ("JET 1236 lathe apron") with one or more searches (variations
 of the query, different sites). Each watch stores the listings it has seen, keyed
-by URL, with when each was first seen and its price history. New listings are
+by URL, with when each was first seen and every price change. New listings are
 judged by the local LLM against the hunt's goal (review.py) before any alert, and
 a listing found by two searches of the same hunt is alerted once.
 
@@ -35,7 +35,7 @@ KEEP_ALERTS = 40             # alerts kept per hunt (shown on its Home Assistant
 HA_POLL_S = 30          # how often the Home Assistant switches are checked
 HA_TIDY_S = 600         # how often orphan helpers are removed and missing ones created
 MISSING_POLLS = 3       # a switch must be missing this many polls in a row (HA running) to end its hunt
-REVIEW_RETRY_S = 600    # retry an LLM review that failed (model down or busy) this often
+REVIEW_RETRY_S = 600    # listings still waiting for an LLM review (it failed, or arrived during one) are retried this often
 
 
 def ago(t: float | None) -> str:
@@ -88,13 +88,18 @@ class Watches:
         self._migrate()
 
     async def import_state(self, data: dict) -> int:
-        """Load a watches.json from an earlier install (its hunts keep their Home Assistant switches).
-        Refused while any search exists here, so nothing is overwritten. Returns the number of hunts."""
+        """Load a watches.json from an earlier install. Refused while any search exists here, so nothing is
+        overwritten. Returns the number of hunts.
+        Its hunts' switches were orphans to this install until now, so they may already be deleted, and a missing
+        switch ends its hunt. So the links are dropped and sync_ha() creates the switches again (same names, so
+        the same entity ids once the old ones are gone)."""
         if not isinstance(data, dict) or not isinstance(data.get("watches"), dict):
             raise ValueError("not a watches.json")
         async with self._lock:
             if self.data["watches"]:
                 raise ValueError("this install already has searches; delete them before importing")
+            for h in (data.get("hunts") or {}).values():
+                h["ha"], h["missing"] = None, 0
             self._load(data)
         log.info("imported %d hunts, %d searches", len(self.data["hunts"]), len(self.data["watches"]))
         await self.sync_ha(force=True)
@@ -417,12 +422,16 @@ class Watches:
                 old = w["items"].get(url)
                 if old is None:
                     rec = {"title": i["title"], "store": store, "details": i.get("details", ""), "price": price,
-                           "first_seen": t, "last_seen": t, "baseline": baseline}
+                           "first_seen": t, "last_seen": t, "baseline": baseline, "prices": [[t, price]]}
                     w["items"][url] = rec
                     if not baseline:
                         new.append((url, rec))
                     continue
                 old.update(title=i["title"], details=i.get("details", ""), last_seen=t)
+                history = old.setdefault("prices", [[t, old.get("price")]])  # listings saved before history existed
+                if price != history[-1][1]:
+                    history.append([t, price])
+                    del history[:-50]
                 if price is not None and old.get("price") is not None and price < old["price"] - 0.005:
                     old["prev_price"], old["dropped_at"], old["drop_pending"] = old["price"], t, True
                     drops.append((url, old))
@@ -500,23 +509,23 @@ class Watches:
                     rec["review"] = {"match": True, "note": "", "repost_of": None, "unreviewed": True}
 
             new, drops = [], []
-            alerted = set(h["alerted"])
+            alerted = dict.fromkeys(h["alerted"])  # ordered oldest first, so trimming drops the oldest
             for u, rec in items.items():
                 if "review" not in rec:
                     continue
                 if not rec.get("alerted"):
                     rec["alerted"] = True
                     if rec.get("baseline"):
-                        alerted.add(u)
+                        alerted[u] = None
                     elif self.accepted(rec) and u not in alerted:  # another search of this hunt may have sent it
                         new.append((u, rec))
-                        alerted.add(u)
+                        alerted[u] = None
                         rec.pop("drop_pending", None)
                 if rec.pop("drop_pending", False) and rec["review"]["match"]:
                     key = f"drop:{u}:{rec.get('price')}"  # the same drop seen by two searches alerts once
                     if key not in alerted:
                         drops.append((u, rec))
-                        alerted.add(key)
+                        alerted[key] = None
             h["alerted"] = list(alerted)[-3000:]
             async with self._lock:
                 if self.get(w["id"]):
@@ -545,8 +554,9 @@ class Watches:
                 for w in due:
                     await self.check(w["id"])
                     await asyncio.sleep(10)
-                for w in self.all():  # listings whose LLM review failed earlier
-                    if w.get("review_error") and time.time() - w.get("review_tried", 0) > REVIEW_RETRY_S:
+                for w in self.all():  # listings still waiting for review: it failed, or a check came in during one
+                    if any("review" not in rec for rec in w["items"].values()) \
+                            and time.time() - w.get("review_tried", 0) > REVIEW_RETRY_S:
                         await self._review_and_notify(w)
             except Exception:
                 log.exception("watch loop error")

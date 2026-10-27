@@ -14,11 +14,13 @@ With API_KEY set, every route except /health needs the header "Authorization: Be
 """
 
 import asyncio
+import contextlib
 import hmac
 import logging
 import logging.handlers
 import os
 import re
+import signal
 import time
 from urllib.parse import quote_plus, urlsplit
 
@@ -40,6 +42,7 @@ import watches  # noqa: E402
 from fetcher import Fetcher, domain_of  # noqa: E402
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per request (HA polls every 5 s) drowns the log
 # Watch/Home Assistant events also go to a file in the data volume, which survives container rebuilds.
 _fh = logging.handlers.RotatingFileHandler(os.path.join(os.environ.get("DATA_DIR", "/data"), "shopsearch.log"),
                                            maxBytes=2_000_000, backupCount=3)
@@ -777,6 +780,11 @@ async def main():
         log.warning("no API key set: anyone who can reach port %d can use this server", PORT)
     app = require_key(mcp.streamable_http_app())
     server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=PORT, log_level="warning"))
+    # uvicorn re-raises SIGTERM after shutting down, so the process ends "killed" (exit 143) and the Supervisor
+    # marks a normal stop as an error. Handle the signals here instead and return normally.
+    server.capture_signals = contextlib.nullcontext
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        asyncio.get_running_loop().add_signal_handler(sig, server.handle_exit, sig, None)
     tasks = [asyncio.create_task(W.loop()), asyncio.create_task(request_loop())]
     try:
         await server.serve()

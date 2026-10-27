@@ -35,8 +35,10 @@ settings moved to add-on options, API key on the MCP server.
 - ★ **Open each new listing before review.** Fetch the listing page, plus photos (the model has vision),
   so issues mentioned only in descriptions get caught ("doesn't run", "parts only").
 - ★ **True total price.** Add shipping, estimate tax, or show distance/drive time for local pickup.
-- **Price history and "is this a good deal?".** All prices seen are already stored. Add per-hunt charts
-  and sold-price data (eBay sold listings) so the reviewer can say "$400 below typical".
+- **Price history and "is this a good deal?".** Each listing keeps its price changes (`prices`, since 1.0.1)
+  until 30 days after it was last seen; listings that sold or vanished are dropped then. Add per-hunt charts,
+  keep gone listings' last prices, and add sold-price data (eBay sold listings) so the reviewer can say
+  "$400 below typical".
 - **Store health checks.** Run a daily known search per store and flag when a layout change silently
   drops results to zero.
 - **Saved HTML fixtures per store** for automated extraction tests.

@@ -51,7 +51,7 @@ while this add-on has no searches yet:
     curl -X POST -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
          --data @watches.json http://<home-assistant-ip>:8765/api/import
 
-Hunts keep their switches, alert history and listings.
+Hunts keep their alert history and listings; their switches are recreated under the same names.
 
 ## Logs
 
