@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0
+
+- Before the review, new listings that could alert are opened: the model reads the seller's description and looks
+  at the main photo (if it takes images), so "parts only" or "doesn't run" in the description is caught. eBay
+  listings are read through the API.
+- One notification per listing, with **Not interested** (drops it, rejects reposts of it, and teaches the hunt's
+  reviewer) and **Stop hunt** buttons.
+- The add-on now installs a prebuilt image from GitHub instead of building Chromium on your Home Assistant box.
+
 ## 1.1.0
 
 - Store health: a daily test search per built-in store; your default phone hears when a store stops returning

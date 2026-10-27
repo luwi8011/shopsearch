@@ -41,7 +41,8 @@ Admin Panel → Settings → External Tools → add an MCP (Streamable HTTP) con
 - In a chat: "find the cheapest JET 1236 lathe apron", "watch Craigslist and Facebook for a KTM 300 under $5000".
 - On the dashboard: type a request in the box and press Send. The answer arrives on your phone within a few
   minutes, and the hunt gets a tile and a page.
-- To stop a hunt, turn its switch off (tap the tile's icon).
+- Each alert has two buttons: **Not interested** drops that listing and teaches the hunt's reviewer what you don't
+  want; **Stop hunt** ends the hunt. You can also turn a hunt's switch off (tap the tile's icon).
 
 ## Moving from a Docker install
 

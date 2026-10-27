@@ -18,15 +18,12 @@ settings moved to add-on options, API key on the MCP server.
   the log, and as an API route).
 - **aarch64 build** (Raspberry Pi and other ARM boxes): patchright ships ARM Chromium, but it is untested and
   memory is tight there.
-- **Publish a prebuilt image** (GHCR) so installs and updates don't build Chromium on the HA box.
 - **Works with any OpenAI-compatible LLM** (Ollama, LM Studio, vLLM, cloud). Mostly config already; needs prompt
   testing on smaller models.
 - **Honest docs about scraping.** Cover terms of service, polite rates, and preferring official APIs.
 
 ## Better results
 
-- ★ **Open each new listing before review.** Fetch the listing page, plus photos (the model has vision),
-  so issues mentioned only in descriptions get caught ("doesn't run", "parts only").
 - ★ **True total price.** Add shipping, estimate tax, or show distance/drive time for local pickup.
 - **Price history and "is this a good deal?".** Each listing keeps its price changes (`prices`, since 1.0.1)
   until 30 days after it was last seen; listings that sold or vanished are dropped then. Add per-hunt charts,
@@ -40,8 +37,7 @@ settings moved to add-on options, API key on the MCP server.
 
 ## Better alerts
 
-- ★ **Actionable notifications:** "Not interested", "Stop this hunt", "Show similar". Feed rejections back
-  into the review prompt as examples so the reviewer learns the user's taste.
+- **More notification buttons:** "Show similar", "Remind me later". (Not interested and Stop hunt exist since 1.2.0.)
 - **Quiet hours, and an optional daily digest** for low-priority hunts.
 - **Hunts that end themselves:** "stop after I buy one", "end in 30 days".
 - **Auction-ending-soon alerts**, and a target-price trigger.

@@ -9,9 +9,11 @@ git-ignored `LOCAL.md` (read it first if it exists: it says where this install r
 
 ## Run and release
 
-- The add-on's code is `shopsearch/app/`, built from `shopsearch/Dockerfile` by the Supervisor on the HA box.
-- Release: bump `version` in `shopsearch/config.yaml`, add to `shopsearch/CHANGELOG.md`, fast-forward `main`,
-  then update the add-on in HA (Supervisor store reload + update). Logs: the add-on's Log tab or
+- The add-on's code is `shopsearch/app/`. GitHub Actions (`.github/workflows/addon-image.yml`) builds
+  `shopsearch/Dockerfile` into `ghcr.io/luwi8011/shopsearch-amd64:<version>`; Home Assistant pulls that image.
+- Release: bump `version` in `shopsearch/config.yaml` (a published version is never rebuilt), add to
+  `shopsearch/CHANGELOG.md`, push `work` (ws-publish), wait for the "Add-on image" run to succeed, then fast-forward
+  `main` and update the add-on in HA (Supervisor store reload + update). Logs: the add-on's Log tab or
   `GET /api/hassio/addons/<slug>/logs` with an admin token; events also go to `/data/shopsearch.log`.
 - Plain Docker: `docker compose up -d --build` with `.env` (template `.env.example`).
 

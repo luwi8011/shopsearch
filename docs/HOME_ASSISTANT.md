@@ -52,9 +52,15 @@ instances on one Home Assistant would delete each other's switches as orphans: r
 
 ## Notifications
 
-- Format: title "<hunt>: N new matches, M price drops". The body lists up to 3 entries, each
-  `$price · title (location, store)` with `→ LLM comparison note` under it. Tapping opens the first
-  listing (`data.url` for iOS, `clickAction` for Android).
+- One notification per alerted listing (at most 3 per check, then one "+N more"): title "<hunt>: new match" or
+  "<hunt>: price drop", body `$price · title (location, store)` with `→ LLM comparison note`. Tapping opens the
+  listing (`data.url` for iOS, `clickAction` for Android); `tag` is `shop_<listing id>` (sha1 of the URL, 10 hex).
+- Buttons: **Not interested** (`SHOPSEARCH_NO_<hunt id>_<listing id>`) and **Stop hunt**
+  (`SHOPSEARCH_STOP_<hunt id>`). shopsearch keeps a WebSocket subscription to `mobile_app_notification_action`
+  events. Not interested marks the listing rejected (no new or price-drop alerts, reposts of it are rejected too),
+  adds it to the hunt's `rejected` examples for the reviewer (last 20), marks it on the hunt page and clears the
+  notification. Stop hunt deletes the hunt like turning its switch off.
+- Store health alerts ("<store> stopped working" / "works again") go to `HA_NOTIFY`.
 - Recipients per hunt (`hunt.recipients` = [{service, name}]):
   - The person who pressed Send: HA user id (from the button state's `context.user_id`) →
     `person.*` with that `user_id` → its `device_trackers` → `notify.mobile_app_<tracker object id>`,

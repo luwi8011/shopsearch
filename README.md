@@ -75,9 +75,13 @@ ignore it.
   search). A listing found by two searches of a hunt alerts once.
 - The first run of a search is a baseline and never alerts. Later runs: new listings and price drops.
 - LLM review (app/review.py): before any alert, the model checks each new listing against `want` (a real
-  match, not parts, gear, "wanted" posts or other models) and whether it reposts a listing already accepted;
-  a cheaper repost alerts as a price drop. It writes a one-sentence comparison shown in the alert. Listings
-  wait until a review succeeds; failed reviews retry every 10 minutes.
+  match, not parts, gear, "wanted" posts or other models) and whether it reposts a listing already seen;
+  a cheaper repost alerts as a price drop. New listings that could alert are opened first: the model also reads
+  the seller's description and looks at the main photo (when it takes images), so "parts only" or "doesn't run"
+  is caught. It writes a one-sentence comparison shown in the alert. Listings wait until a review succeeds;
+  failed reviews retry every 10 minutes.
+- Each alert is its own phone notification with **Not interested** (the listing is dropped, never alerts again,
+  and becomes an example of what you don't want for that hunt's reviewer) and **Stop hunt**.
 - `watch_report` shows what changed since the last report; `watch_manage` lists, pauses, resumes, deletes,
   re-runs, moves searches between hunts and sets `want`.
 

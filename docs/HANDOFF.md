@@ -26,9 +26,10 @@ fetch method works per site), `learned_sites.json` (auto-discovered search URLs)
 (Chromium cookies), `health.json` (daily store test results) and `shopsearch.log` (watch, Home Assistant, agent
 and store-health events, rotated).
 
-Releasing: bump `version` in `shopsearch/config.yaml`, add a `shopsearch/CHANGELOG.md` entry, and get it onto
-`main` (day-to-day pushes go to branch `work`; fast-forward `main` to release). Home Assistant then offers the
-update, and the Supervisor builds the image on the HA box from `shopsearch/Dockerfile`.
+Releasing: bump `version` in `shopsearch/config.yaml`, add a `shopsearch/CHANGELOG.md` entry, push `work`. The
+"Add-on image" GitHub Actions workflow builds `ghcr.io/luwi8011/shopsearch-amd64:<version>` (never rebuilding a
+published version). Once it has succeeded, fast-forward `main`; Home Assistant then offers the update and pulls
+the image (`image:` in config.yaml). Moving `main` before the image exists makes the update fail.
 
 ## Architecture
 
