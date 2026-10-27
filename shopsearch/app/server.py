@@ -805,14 +805,27 @@ async def api_import(req: Request):
 
 
 def require_key(app):
-    """ASGI wrapper: with API_KEY set, every request except /health must carry it as a Bearer token."""
-    expected = f"Bearer {API_KEY}".encode()
+    """ASGI wrapper: with API_KEY set, every request except /health must carry it as a Bearer token. The scheme
+    is case-insensitive and stray spaces (from copy-paste) are ignored. Rejections are logged with the reason,
+    because MCP clients such as Open WebUI only report that "verification failed"."""
+    expected = API_KEY.strip().encode()
+    seen: set[str] = set()
 
     async def guarded(scope, receive, send):
-        if scope["type"] == "http" and scope["path"] != "/health" and \
-                not hmac.compare_digest(dict(scope["headers"]).get(b"authorization", b""), expected):
-            await PlainTextResponse("missing or wrong API key", status_code=401)(scope, receive, send)
-            return
+        if scope["type"] == "http" and scope["path"] != "/health":
+            client = (scope.get("client") or ("?",))[0]
+            if client not in seen:
+                seen.add(client)
+                log.info("first request from %s (%s %s)", client, scope["method"], scope["path"])
+            header = dict(scope["headers"]).get(b"authorization", b"").strip()
+            scheme, _, key = header.partition(b" ")
+            if scheme.lower() != b"bearer" or not hmac.compare_digest(key.strip(), expected):
+                why = "no Authorization header" if not header else \
+                    f"not a Bearer token ({scheme[:20].decode(errors='replace')!r})" if scheme.lower() != b"bearer" else \
+                    f"wrong key ({len(key.strip())} characters, expected {len(expected)})"
+                log.warning("refused %s %s from %s: %s", scope["method"], scope["path"], client, why)
+                await PlainTextResponse("missing or wrong API key", status_code=401)(scope, receive, send)
+                return
         await app(scope, receive, send)
     return guarded if API_KEY else app
 

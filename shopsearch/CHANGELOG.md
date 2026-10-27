@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2
+
+- The API key check ignores stray spaces and the case of "Bearer", and the log now says why a request was refused
+  (no key, not a Bearer token, wrong key) and shows each client's first request.
+
 ## 1.2.1
 
 - No more traceback in the log when the add-on stops.
