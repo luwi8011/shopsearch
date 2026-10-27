@@ -16,7 +16,7 @@ import httpx
 
 log = logging.getLogger("shopsearch.review")
 
-LLM_URL = os.environ.get("LLM_URL", "").rstrip("/")          # OpenAI-compatible, e.g. http://192.168.0.252:11434/v1
+LLM_URL = os.environ.get("LLM_URL", "").rstrip("/")          # OpenAI-compatible, e.g. http://192.168.1.20:11434/v1
 LLM_MODEL = os.environ.get("LLM_MODEL", "")
 LLM_TIMEOUT_S = int(os.environ.get("LLM_TIMEOUT_S", "300"))
 BATCH = 20

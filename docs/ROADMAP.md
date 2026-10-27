@@ -1,9 +1,7 @@
 # Roadmap and recommendations
 
-Ideas collected on 2026-10-26, not yet started. ★ marks the highest-value items. The suggested order
-is: (1) fetch each listing before review, (2) notification actions that train the reviewer, and
-(3) remove the hard-coded personal settings. The first two improve the tool now; the third is the gate
-for anyone else using it.
+Ideas collected on 2026-10-26. ★ marks the highest-value items. Done since: Home Assistant add-on, personal
+settings moved to add-on options, API key on the MCP server.
 
 ## Pending from earlier work
 
@@ -20,26 +18,16 @@ for anyone else using it.
 
 ## Making it usable by other people
 
-- ★ **Make the hard-coded personal settings configurable.** These are:
-  - Erie/80516 and Denver Craigslist.
-  - Facebook's `erie-co` slug.
-  - The default phone.
-  - Strata's URL and the model name.
-  - `ha-tools`.
-  - "Qwen" in user-facing text.
-  - The user profile in `agent.SYSTEM`.
-
-  Move them all to config with defaults, plus a setup check.
-- ★ **A real Home Assistant custom integration (HACS)** instead of REST-pushed sensors and dashboard
-  rewriting. It would give real entities with unique_ids that survive restarts, a config flow and a
-  card users add themselves. It removes the most fragile part of the design.
-- ★ **One-command install.** Publish the image, keep `.env.example` and add a `doctor` command that tests
-  search, LLM, HA and each store and reports problems plainly.
-- **Works with any OpenAI-compatible LLM** (Ollama, LM Studio, vLLM, cloud). Mostly config, plus prompt
+- ★ **A Home Assistant integration next to the add-on** (HACS or bundled) for real entities with unique_ids
+  instead of REST-pushed sensors and dashboard rewriting, plus a card users add themselves. The add-on keeps
+  doing the scraping (HA's own Python can't run the stealth browser). Removes the most fragile part of the design.
+- ★ **A `doctor` check** that tests search, LLM, HA and each store and reports problems plainly (on start, in
+  the log, and as an API route).
+- **aarch64 build** (Raspberry Pi and other ARM boxes): patchright ships ARM Chromium, but it is untested and
+  memory is tight there.
+- **Publish a prebuilt image** (GHCR) so installs and updates don't build Chromium on the HA box.
+- **Works with any OpenAI-compatible LLM** (Ollama, LM Studio, vLLM, cloud). Mostly config already; needs prompt
   testing on smaller models.
-- **Security.**
-  - The MCP server has no auth (it is safe only because it binds to localhost). Add an API key.
-  - Document a dedicated, limited HA user instead of a full-admin token.
 - **Honest docs about scraping.** Cover terms of service, polite rates, and preferring official APIs.
 
 ## Better results

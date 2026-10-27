@@ -1,0 +1,54 @@
+name: Shop Search
+version: "1.0.0"
+slug: shopsearch
+description: Price research and deal hunts for a local LLM, with phone alerts through Home Assistant
+url: https://github.com/luwi8011/shopsearch
+arch:
+  - amd64
+startup: application
+boot: auto
+homeassistant_api: true
+ports:
+  8765/tcp: 8765
+ports_description:
+  8765/tcp: MCP server and REST API (Open WebUI connects here)
+backup_exclude:
+  - browser-profile
+  - "*.log*"
+options:
+  llm_url: ""
+  llm_model: ""
+  assistant_name: Assistant
+  about_user: ""
+  home_zip: ""
+  craigslist_site: denver
+  facebook_location: denver
+  local_radius_miles: 25
+  default_sites:
+    - amazon
+    - ebay
+  notify_service: ""
+  dashboard: ""
+  searxng_url: ""
+  api_key: ""
+  ebay_client_id: ""
+  ebay_client_secret: ""
+  browser_pages: 3
+schema:
+  llm_url: str?
+  llm_model: str?
+  assistant_name: str
+  about_user: str?
+  home_zip: str?
+  craigslist_site: str
+  facebook_location: str
+  local_radius_miles: int(1,500)
+  default_sites:
+    - str
+  notify_service: str?
+  dashboard: str?
+  searxng_url: str?
+  api_key: password?
+  ebay_client_id: str?
+  ebay_client_secret: password?
+  browser_pages: int(1,6)

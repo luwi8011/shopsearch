@@ -14,8 +14,9 @@ that no live hunt owns.
 - A request box (input_text + input_button) lets the user type a watch request for
   the local LLM; a status sensor shows its answer.
 
-Needs HA_URL and HA_TOKEN (a long-lived access token). HA_NOTIFY is the notify
-service (e.g. mobile_app_pixel_8); HA_DASHBOARD is the dashboard url_path.
+Needs HA_URL and HA_TOKEN; as a Home Assistant add-on they point at the Supervisor proxy
+(addon_options.py). HA_NOTIFY is the default notify service (e.g. mobile_app_pixel_8);
+HA_DASHBOARD is the url_path of the dashboard that gets the "Shop Watches" section (empty: none).
 """
 
 import json
@@ -28,7 +29,9 @@ import websockets
 log = logging.getLogger("shopsearch.ha")
 
 HA_URL = os.environ.get("HA_URL", "").rstrip("/")
+HA_WS_URL = os.environ.get("HA_WS_URL") or HA_URL.replace("http", "ws", 1) + "/api/websocket"
 HA_TOKEN = os.environ.get("HA_TOKEN", "")
+ASSISTANT = os.environ.get("ASSISTANT_NAME", "Assistant")
 HA_NOTIFY = os.environ.get("HA_NOTIFY", "")
 HA_DASHBOARD = os.environ.get("HA_DASHBOARD", "")
 SECTION_HEADING = "Shop Watches"
@@ -50,9 +53,8 @@ def _headers() -> dict:
 
 async def _ws(*calls: dict) -> list:
     """Run WebSocket API calls on one authenticated connection; returns each call's result."""
-    url = HA_URL.replace("http", "ws", 1) + "/api/websocket"
     out = []
-    async with websockets.connect(url, max_size=8 * 1024 * 1024, open_timeout=15) as ws:
+    async with websockets.connect(HA_WS_URL, max_size=8 * 1024 * 1024, open_timeout=15) as ws:
         await ws.recv()  # auth_required
         await ws.send(json.dumps({"type": "auth", "access_token": HA_TOKEN}))
         msg = json.loads(await ws.recv())
@@ -192,13 +194,13 @@ def _hunt_cards(h: dict) -> tuple[dict, dict]:
 def _section(hunts: list[dict]) -> dict:
     cards = [
         {"type": "heading", "heading": SECTION_HEADING, "icon": "mdi:cart-search"},
-        {"type": "entities", "entities": [{"entity": REQUEST_TEXT, "name": "Ask Qwen to watch for…"}],
+        {"type": "entities", "entities": [{"entity": REQUEST_TEXT, "name": f"Ask {ASSISTANT} to watch for…"}],
          "grid_options": {"columns": "full"}},
-        {"type": "tile", "entity": REQUEST_BUTTON, "name": "Send to Qwen", "icon": "mdi:send",
+        {"type": "tile", "entity": REQUEST_BUTTON, "name": f"Send to {ASSISTANT}", "icon": "mdi:send",
          "tap_action": {"action": "perform-action", "perform_action": "input_button.press",
                         "target": {"entity_id": REQUEST_BUTTON}},
          "grid_options": {"columns": 4}},
-        {"type": "tile", "entity": STATUS_SENSOR, "name": "Qwen", "icon": "mdi:robot-outline",
+        {"type": "tile", "entity": STATUS_SENSOR, "name": ASSISTANT, "icon": "mdi:robot-outline",
          "grid_options": {"columns": 8}},
     ]
     if hunts:

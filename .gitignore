@@ -1,5 +1,7 @@
 # secrets
 .env
+# notes about one install (hosts, people, tokens' whereabouts); the repo is public
+LOCAL.md
 # runtime state: browser cookies/profile, saved hunts and listings, logs
 data/
 __pycache__/

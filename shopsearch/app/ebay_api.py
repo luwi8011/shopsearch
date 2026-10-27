@@ -12,7 +12,7 @@ import httpx
 
 CLIENT_ID = os.environ.get("EBAY_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("EBAY_CLIENT_SECRET", "")
-ZIP = os.environ.get("ZIP_CODE", "")
+ZIP = os.environ.get("HOME_ZIP", "")
 
 _token: tuple[str, float] = ("", 0.0)
 

@@ -1,0 +1,50 @@
+configuration:
+  llm_url:
+    name: LLM URL
+    description: OpenAI-compatible API of the model that reviews listings and handles the request box, e.g. http://192.168.1.20:11434/v1. Empty turns review off (every new listing alerts).
+  llm_model:
+    name: LLM model
+    description: Model name to send to that API.
+  assistant_name:
+    name: Assistant name
+    description: What the request box calls the model on the dashboard ("Send to …").
+  about_user:
+    name: About you
+    description: A sentence or two for the model, e.g. where you live, how far you drive for pickup, what you usually buy.
+  home_zip:
+    name: Home ZIP code
+    description: Center of the Craigslist pickup radius and the eBay shipping estimate.
+  craigslist_site:
+    name: Craigslist site
+    description: The subdomain of your Craigslist site (denver for denver.craigslist.org).
+  facebook_location:
+    name: Facebook Marketplace location
+    description: The location slug in Marketplace URLs (facebook.com/marketplace/<slug>/search).
+  local_radius_miles:
+    name: Pickup radius (miles)
+    description: Default distance for Craigslist and Facebook searches; the model can raise it per search.
+  default_sites:
+    name: Default sites
+    description: Sites searched when the model doesn't name any.
+  notify_service:
+    name: Default phone
+    description: Notify service for hunts without a recipient, without the "notify." prefix (e.g. mobile_app_pixel_8).
+  dashboard:
+    name: Dashboard
+    description: URL path of the dashboard that gets the "Shop Watches" section and a page per hunt (e.g. dashboard-tools). Empty leaves dashboards alone.
+  searxng_url:
+    name: SearXNG URL
+    description: Your SearXNG server, for the web_search tool. Empty turns web_search off.
+  api_key:
+    name: API key
+    description: Required by the MCP server and REST API as "Authorization: Bearer <key>". Set one; port 8765 is reachable from your whole network.
+  ebay_client_id:
+    name: eBay client ID
+    description: Production keyset from developer.ebay.com. With both eBay fields set, eBay uses the official API instead of scraping.
+  ebay_client_secret:
+    name: eBay client secret
+  browser_pages:
+    name: Browser pages
+    description: How many pages the stealth browser may load at once. More is faster but uses more memory.
+network:
+  8765/tcp: MCP server and REST API

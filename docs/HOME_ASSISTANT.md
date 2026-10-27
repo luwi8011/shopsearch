@@ -1,19 +1,20 @@
 # Home Assistant integration
 
-Home Assistant 2026.10.1 at `http://192.168.0.161:8123` (also `homeassistant.local`), timezone America/Denver.
-Code: `app/ha.py` (client and dashboard renderer) and `Watches.sync_ha()` in `app/watches.py`.
+Code: `shopsearch/app/ha.py` (client and dashboard renderer) and `Watches.sync_ha()` in `shopsearch/app/watches.py`.
 
 ## Connection
 
-- `HA_URL=http://192.168.0.161:8123` (docker-compose.yml)
-- `HA_TOKEN`: a long-lived access token in `.env`, created by the user (Lucas) under Profile → Security.
-  It is a full-admin token. A dedicated limited user would be better (see ROADMAP).
-- `HA_DASHBOARD=ha-tools`: the "Tools" dashboard (storage mode, sections view, path `tools`).
-- `HA_NOTIFY=mobile_app_localhost`: the default phone (Lucas's Android; the Companion app registered
-  it as "localhost").
+- As an add-on: `addon_options.py` points `HA_URL` at `http://supervisor/core` and `HA_WS_URL` at
+  `ws://supervisor/core/websocket`, with the add-on's `SUPERVISOR_TOKEN` (`homeassistant_api: true` in
+  `config.yaml`). No user token is needed.
+- As plain Docker: `HA_URL` plus `HA_TOKEN`, a long-lived access token (Profile → Security). It must belong to
+  an admin, because creating helpers and saving dashboards are admin-only.
+- `HA_DASHBOARD` (add-on option `dashboard`): url_path of a storage-mode dashboard whose first view uses
+  sections. Empty: no dashboard edits.
+- `HA_NOTIFY` (option `notify_service`): the default phone, e.g. `mobile_app_pixel_8`.
+- `ASSISTANT_NAME` (option `assistant_name`): how the dashboard names the model ("Send to …").
 - Uses the REST API (states, services, config) and the WebSocket API (helper create/delete,
   `lovelace/config` and `lovelace/config/save`).
-- Python dependency: `websockets` (installed in its own Dockerfile layer).
 
 ## What shopsearch creates and owns
 
@@ -21,18 +22,18 @@ Code: `app/ha.py` (client and dashboard renderer) and `Watches.sync_ha()` in `ap
 |---|---|---|
 | `input_boolean.shop_hunt_<slug>` | UI helper | One per hunt. On while the hunt exists. Turning it off (with confirmation) deletes the hunt and all its searches within ~30 s |
 | `sensor.shop_hunt_<slug>` | REST-pushed state (no unique_id) | State is "N alerts". Attribute `alerts` holds up to 25 entries {t (ISO UTC), title, url, price, was, where, note}. Re-pushed after HA restarts |
-| `input_text.shop_watch_request` | UI helper (max 255) | The request box ("Ask Qwen to watch for…") |
-| `input_button.shop_watch_request_send` | UI helper | "Send to Qwen". shopsearch polls its state every 5 s |
-| `sensor.shop_watch_request_status` | REST-pushed state | Status of the last request ("Working on: …", then Qwen's one-line answer) |
-| Section "Shop Watches" in view 0 of `ha-tools` | Dashboard | Heading, request box, Send button, status tile, then one tile per hunt |
-| Sub-views `shop-<slug>` in `ha-tools` | Dashboard | A page per hunt: switch tile, "Looking for" plus searches plus "Alerts go to", and alert history (markdown template over the sensor) |
+| `input_text.shop_watch_request` | UI helper (max 255) | The request box ("Ask … to watch for…") |
+| `input_button.shop_watch_request_send` | UI helper | "Send to …". shopsearch polls its state every 5 s |
+| `sensor.shop_watch_request_status` | REST-pushed state | Status of the last request ("Working on: …", then the model's one-line answer) |
+| Section "Shop Watches" in view 0 of the dashboard | Dashboard | Heading, request box, Send button, status tile, then one tile per hunt |
+| Sub-views `shop-<slug>` in the dashboard | Dashboard | A page per hunt: switch tile, "Looking for" plus searches plus "Alerts go to", and alert history (markdown template over the sensor) |
 
 `ha.render_dashboard()` regenerates the section and every `shop-*` sub-view from current state and
 saves only if something changed. It finds its section by the heading text "Shop Watches", so
 don't hand-edit that section: edits are overwritten. Other sections are untouched.
 
-Legacy prefix `input_boolean.shop_watch_` (from the per-watch design before 2026-10-26) is treated as
-orphaned and deleted automatically.
+Legacy prefix `input_boolean.shop_watch_` (from the per-watch design) is treated as orphaned and deleted
+automatically.
 
 ## Reconciliation (`Watches.sync_ha`, every 30 s; full tidy every 10 min or on any change)
 
@@ -46,7 +47,8 @@ orphaned and deleted automatically.
    - Create the request helpers and the status sensor if missing.
 5. Re-render the dashboard if anything changed.
 
-Only `sync_ha()` creates switches, under `_ha_lock`. This fixed the 2026-10-26 duplicate-switch bug.
+Only `sync_ha()` creates switches, under `_ha_lock`. This fixed a duplicate-switch bug. Two shopsearch
+instances on one Home Assistant would delete each other's switches as orphans: run only one.
 
 ## Notifications
 
@@ -54,21 +56,11 @@ Only `sync_ha()` creates switches, under `_ha_lock`. This fixed the 2026-10-26 d
   `$price · title (location, store)` with `→ LLM comparison note` under it. Tapping opens the first
   listing (`data.url` for iOS, `clickAction` for Android).
 - Recipients per hunt (`hunt.recipients` = [{service, name}]):
-  - The person who pressed "Send to Qwen": HA user id (from the button state's `context.user_id`) →
+  - The person who pressed Send: HA user id (from the button state's `context.user_id`) →
     `person.*` with that `user_id` → its `device_trackers` → `notify.mobile_app_<tracker object id>`,
     if that service exists.
   - Anyone who adds to an existing hunt is added to its recipients.
-  - Hunts from Open WebUI, and users without a phone (Guest), fall back to `HA_NOTIFY`.
-- People at the time of writing:
-
-| Person | HA user_id | Tracker | Notify service |
-|---|---|---|---|
-| Lucas Wilson | 6cec0d0a3be44752b151f433d61e0665 | device_tracker.localhost | mobile_app_localhost |
-| Kari | ef48d2076e20488c884466857e840872 | device_tracker.karis_iphone | mobile_app_karis_iphone |
-| Guest | 272e845136c7449dbbc67e2eca196e8c | none | (fallback) |
-| Home Maintenance | none | none | n/a |
-
-Other notify targets that exist: `mobile_app_kitchen_tablet`, `lg_webos_tv_lk5700pua`, `notify.notify`.
+  - Hunts from Open WebUI, and users without a phone, fall back to `HA_NOTIFY`.
 
 ## Request box flow
 
@@ -80,12 +72,5 @@ Other notify targets that exist: `mobile_app_kitchen_tablet`, `lg_webos_tv_lk570
    hunt, same hunt name). It finishes with one sentence.
 5. Status is set to the answer, the request box is cleared, and the answer is sent to the requester's phone.
 
-Typical duration is 3–7 minutes, because the first run of each new search is reviewed by the LLM.
-
-## Also on this HA instance (context, not used by shopsearch)
-
-- The `ha-mcp` MCP server (homeassistant-ai) is reachable for Claude via a claude.ai connector. It is also
-  registered in Open WebUI as a tool server with id `ha`. Its webhook URL doubles as a credential, so
-  keep it out of git.
-- The Tools dashboard's other sections: Poppy's feeder, feeding schedule, RF remote learning,
-  learned RF commands, HVAC filter, door lock batteries, dashboard theme.
+Typical duration is 3–7 minutes with a mid-size local model, because the first run of each new search is
+reviewed by the LLM.

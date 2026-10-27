@@ -8,9 +8,13 @@ Tools:
 
 REST mirrors for testing / other programs:
   GET /api/search?q=...&sites=amazon,ebay   GET /api/fetch?url=...   GET /api/web?q=...   GET /health
+  POST /api/import (a watches.json from an earlier install; only while there are no hunts)
+
+With API_KEY set, every route except /health needs the header "Authorization: Bearer <API_KEY>".
 """
 
 import asyncio
+import hmac
 import logging
 import logging.handlers
 import os
@@ -18,18 +22,22 @@ import re
 import time
 from urllib.parse import quote_plus, urlsplit
 
-import httpx
-from mcp.server.fastmcp import FastMCP
-from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse
+import addon_options
 
-import agent
-import ebay_api
-import extract
-import review
-import sites
-import watches
-from fetcher import Fetcher, domain_of
+addon_options.apply()  # before the app modules below read their settings from os.environ
+
+import httpx  # noqa: E402
+from mcp.server.fastmcp import FastMCP  # noqa: E402
+from starlette.requests import Request  # noqa: E402
+from starlette.responses import JSONResponse, PlainTextResponse  # noqa: E402
+
+import agent  # noqa: E402
+import ebay_api  # noqa: E402
+import extract  # noqa: E402
+import review  # noqa: E402
+import sites  # noqa: E402
+import watches  # noqa: E402
+from fetcher import Fetcher, domain_of  # noqa: E402
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 # Watch/Home Assistant events also go to a file in the data volume, which survives container rebuilds.
@@ -41,10 +49,11 @@ for _name in ("shopsearch.watch", "shopsearch.ha", "shopsearch.agent", "shopsear
     logging.getLogger(_name).addHandler(_fh)
 log = logging.getLogger("shopsearch")
 
-SEARXNG_URL = os.environ.get("SEARXNG_URL", "http://192.168.0.60:8080").rstrip("/")
+SEARXNG_URL = os.environ.get("SEARXNG_URL", "").rstrip("/")
 DEFAULT_SITES = [s.strip() for s in os.environ.get("DEFAULT_SITES", "amazon,ebay").split(",") if s.strip()]
 SITE_TIMEOUT_S = int(os.environ.get("SITE_TIMEOUT_S", "90"))
 PORT = int(os.environ.get("PORT", "8765"))
+API_KEY = os.environ.get("API_KEY", "")
 
 F = Fetcher()
 
@@ -276,6 +285,8 @@ async def _searx(q: str, n: int) -> list[dict]:
 
 
 async def run_web_search(query: str, site: str | None = None, max_results: int = 8) -> str:
+    if not SEARXNG_URL:
+        return "web_search is not set up: no SearXNG server is configured (searxng_url)."
     q = f"site:{site} {query}" if site else query
     try:
         hits = await _searx(q, max_results)
@@ -335,8 +346,8 @@ _SHOP_DESC = (
     "    max_price: Drop listings above this price (USD).\n"
     "    min_price: Drop listings below this price; useful to skip cheap accessories that match the words.\n"
     '    condition: "any", "new", or "used" (applied where the site supports it: eBay, Facebook).\n'
-    f"    radius_miles: Pickup distance for craigslist and facebook (default {sites.LOCAL_RADIUS_MI}, about a "
-    "30-minute drive). The user will drive farther for bigger or rarer items; raise it (e.g. 60-100) then.\n"
+    f"    radius_miles: Pickup distance for craigslist and facebook (default {sites.LOCAL_RADIUS_MI}). "
+    "Raise it (e.g. 60-100) for bigger or rarer items.\n"
     "    sort_on_site_by_price: Ask each site for its own lowest-price sort instead of its relevance sort. "
     "Relevance (default) gives better matches; the table is sorted by price either way.\n"
     "    max_results: Rows in the final table (default 25).\n"
@@ -643,7 +654,7 @@ async def _agent_tool(name: str, args: dict, recipients: list[dict] | None = Non
 
 
 async def request_loop():
-    """Watch the Home Assistant "Send to Qwen" button; run the typed request through the local LLM."""
+    """Watch the Home Assistant request button; run the typed request through the local LLM."""
     if not (watches.ha.enabled() and review.enabled()):
         return
     last = None
@@ -737,10 +748,35 @@ async def api_watches(req: Request):
     return PlainTextResponse("\n".join(out) or "no hunts")
 
 
+@mcp.custom_route("/api/import", methods=["POST"])
+async def api_import(req: Request):
+    try:
+        n = await W.import_state(await req.json())
+    except ValueError as e:
+        return PlainTextResponse(str(e), status_code=409)
+    return PlainTextResponse(f"imported {n} hunts")
+
+
+def require_key(app):
+    """ASGI wrapper: with API_KEY set, every request except /health must carry it as a Bearer token."""
+    expected = f"Bearer {API_KEY}".encode()
+
+    async def guarded(scope, receive, send):
+        if scope["type"] == "http" and scope["path"] != "/health" and \
+                not hmac.compare_digest(dict(scope["headers"]).get(b"authorization", b""), expected):
+            await PlainTextResponse("missing or wrong API key", status_code=401)(scope, receive, send)
+            return
+        await app(scope, receive, send)
+    return guarded if API_KEY else app
+
+
 async def main():
     import uvicorn
 
-    server = uvicorn.Server(uvicorn.Config(mcp.streamable_http_app(), host="0.0.0.0", port=PORT, log_level="warning"))
+    if not API_KEY:
+        log.warning("no API key set: anyone who can reach port %d can use this server", PORT)
+    app = require_key(mcp.streamable_http_app())
+    server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=PORT, log_level="warning"))
     tasks = [asyncio.create_task(W.loop()), asyncio.create_task(request_loop())]
     try:
         await server.serve()

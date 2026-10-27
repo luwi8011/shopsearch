@@ -5,33 +5,35 @@ marketplaces directly, returns real listings sorted by price, and runs saved sea
 on a schedule. A local LLM reviews new listings before a phone alert goes out through
 Home Assistant.
 
-Built 2026-10-22 to 2026-10-26 on the `llm` VM, in Claude Code sessions. This file is the map.
-`docs/HOME_ASSISTANT.md` covers the Home Assistant side and `docs/ROADMAP.md` the open ideas.
+Built October 2026 in Claude Code / omp sessions. This file is the map. `docs/HOME_ASSISTANT.md` covers the
+Home Assistant side and `docs/ROADMAP.md` the open ideas. Notes about one particular install (hosts, people)
+belong in a git-ignored `LOCAL.md`, never in the repo: it is public.
 
-## Where it runs today
+## How it runs
 
-| Piece | Where | Notes |
-|---|---|---|
-| shopsearch (this repo) | Docker on the `llm` VM, 192.168.0.252, container `shopsearch` | Listens on `127.0.0.1:8765` only. `docker compose up -d --build` after edits |
-| Open WebUI 0.12.3 | Same VM, Docker, host networking, port 8080 | Connects to shopsearch over MCP |
-| LLM: Strata serving `qwen3.8-flash-next-iq3_xxs` | Same VM, `systemctl --user` service `strata`, `0.0.0.0:11434/v1` (OpenAI-compatible, no key) | Used by Open WebUI and by shopsearch's reviewer and request agent |
-| SearXNG | Docker VM 192.168.0.60:8080 | Used by `web_search`; needed no changes |
-| Home Assistant 2026.10.1 | 192.168.0.161:8123 (`homeassistant.local`) | See docs/HOME_ASSISTANT.md |
+| Piece | Notes |
+|---|---|
+| shopsearch | A Home Assistant OS add-on (`shopsearch/`, installed from this repo, which is also the add-on repository via `repository.yaml`), or plain Docker (`docker-compose.yml`). Listens on port 8765 |
+| Settings | Add-on: Configuration tab → `/data/options.json`, turned into environment variables by `app/addon_options.py` before anything else is imported. Docker: `.env` |
+| Home Assistant | Add-on: the Supervisor proxy (`http://supervisor/core`, `ws://supervisor/core/websocket`) with `SUPERVISOR_TOKEN` (`homeassistant_api: true`). Docker: `HA_URL` + a long-lived token |
+| LLM | Any OpenAI-compatible endpoint (`LLM_URL`, `LLM_MODEL`), used by the reviewer and the request agent |
+| SearXNG | Optional, for `web_search` |
+| MCP client | Open WebUI or any MCP client, Streamable HTTP at `/mcp`, `Authorization: Bearer <API_KEY>` |
 
-Persistent state lives in `./data` (git-ignored): `watches.json` (hunts, searches, every listing
-seen, alert history), `tiers.json` (which fetch method works per site), `learned_sites.json`
-(auto-discovered search URLs), `browser-profile/` (Chromium cookies) and `shopsearch.log`
-(watch, Home Assistant and agent events, rotated, survives rebuilds). Docker's own log is lost on
-every rebuild, so check `shopsearch.log` first.
+Persistent state lives in `/data` (the add-on's data folder, included in HA backups except the browser
+profile and logs): `watches.json` (hunts, searches, every listing seen, alert history), `tiers.json` (which
+fetch method works per site), `learned_sites.json` (auto-discovered search URLs), `browser-profile/`
+(Chromium cookies) and `shopsearch.log` (watch, Home Assistant and agent events, rotated).
 
-Secrets live in `./.env` (git-ignored; template in `.env.example`): `HA_TOKEN`, and the optional
-eBay keys.
+Releasing: bump `version` in `shopsearch/config.yaml`, add a `shopsearch/CHANGELOG.md` entry, and get it onto
+`main` (day-to-day pushes go to branch `work`; fast-forward `main` to release). Home Assistant then offers the
+update, and the Supervisor builds the image on the HA box from `shopsearch/Dockerfile`.
 
 ## Architecture
 
 ```
 Open WebUI ──MCP (streamable HTTP, /mcp)──┐
-Home Assistant "Send to Qwen" button ─────┤  (polled every 5 s)
+Home Assistant request "Send" button ────┤  (polled every 5 s)
                                           ▼
                                app/server.py  (FastMCP + REST mirrors + background tasks)
              ┌────────────────────┬───────┴─────────┬──────────────────────┐
@@ -42,7 +44,7 @@ Home Assistant "Send to Qwen" button ─────┤  (polled every 5 s)
                                        (LLM judge)   (switches, pages, notify)
 ```
 
-### Files (app/)
+### Files (shopsearch/app/)
 
 - **server.py**: entry point. Holds the MCP tools (`shop_search`, `web_search`, `fetch_page`,
   `watch_create`, `watch_report`, `watch_manage`), REST mirrors (`/health`, `/api/search`,
@@ -85,12 +87,13 @@ Home Assistant "Send to Qwen" button ─────┤  (polled every 5 s)
   - Listings wait, with no alert, until a review succeeds; failed reviews retry every 10 minutes.
 - **Relevance rule.** Every query word containing a digit must appear in the title. So use one model
   number per query, never "2853-20 2850-20" in one query. This is in the tool descriptions and the agent prompt.
-- **Local defaults.**
-  - Erie, CO, ZIP 80516.
-  - Craigslist: the `denver` site with `postal=80516&search_distance=25`, which also returns
-    neighbouring Craigslist sites such as Boulder.
-  - Facebook: slug `erie-co`, radius in km.
-  - `radius_miles` per search overrides the 25-mile default.
+- **Local settings** (add-on options): `home_zip`, `craigslist_site`, `facebook_location`,
+  `local_radius_miles`.
+  - Craigslist: the configured site with `postal=<zip>&search_distance=<radius>`, which also returns
+    neighbouring Craigslist sites.
+  - Facebook: the configured location slug, radius in km.
+  - `radius_miles` per search overrides the default.
+  - The request agent's "About the user" comes from `about_user` (falls back to the ZIP).
 - **Condition filter:** eBay (`LH_ItemCondition`), Craigslist (`condition=10` new; 20–50 used), and
   Facebook (`itemCondition`). Retail sites ignore it.
 - **MCP SDK pinned to `mcp==1.30.0`.** Version 2.x changed the API.
@@ -115,19 +118,18 @@ Home Assistant "Send to Qwen" button ─────┤  (polled every 5 s)
 
 ## Open WebUI integration
 
-- MCP connection is stored in the Open WebUI DB (`/home/lucas/llm/open-webui/webui.db`, key
-  `tool_server.connections`): url `http://127.0.0.1:8765/mcp`, type `mcp`, auth none, `info.id` `shop`,
-  name "Shop Search". It was written via `docker exec -i open-webui python -` because the DB is root-owned,
-  then `docker compose restart open-webui`. DB backups are `webui.db.bak-<epoch>`.
-- Attached by default to model `qwen3.8-flash-next-iq3_xxs` (`model.meta.toolIds = ["server:mcp:shop"]`).
-  Other models enable it per chat via `+` → Tools.
+- Admin Panel → Settings → External Tools: type MCP (Streamable HTTP), url `http://<host>:8765/mcp`, Bearer auth
+  with the API key. The connection id (e.g. `shop`) becomes the tool-name prefix.
+- Attach it to a model by default (`model.meta.toolIds = ["server:mcp:<id>"]`), or enable it per chat via `+` → Tools.
 
 ## Testing
 
-- REST: `curl 'http://127.0.0.1:8765/api/search?q=ktm+300&sites=craigslist,facebook&radius_miles=60'`,
+- REST (add `-H "Authorization: Bearer $KEY"`): `/api/search?q=ktm+300&sites=craigslist,facebook&radius_miles=60`,
   `/api/fetch?url=...`, `/api/web?q=...`, and `/api/watches` (`?id=w14` for a report that is not marked read).
-- `tests/`: scripts that run inside the container against fakes and a temp data dir (see tests/README.md).
-- **Do not burst-test eBay or other Akamai sites from this network.** That is how eBay got blocked.
+- `tests/`: scripts that run against fakes and a temp data dir, locally or in the container (see tests/README.md).
+- The server also runs locally (`DATA_DIR=<tmp> python shopsearch/app/server.py`, with an `options.json` in
+  `DATA_DIR`); only the browser tier needs `patchright install chromium`.
+- **Do not burst-test eBay or other Akamai sites from a home network.** That is how eBay got blocked.
 
 ## Lessons learned (keep these)
 

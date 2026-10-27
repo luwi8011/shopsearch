@@ -6,8 +6,8 @@ import _harness as t
 t.stub_ha()
 import watches  # noqa: E402
 
-KARI = [{"service": "mobile_app_karis_iphone", "name": "Kari"}]
-LUCAS = [{"service": "mobile_app_localhost", "name": "Lucas"}]
+ANA = [{"service": "mobile_app_anas_iphone", "name": "Ana"}]
+BEN = [{"service": "mobile_app_pixel_8", "name": "Ben"}]
 OLD = ("CL", t.item("thing", 5.0, "u-old"))
 NEW = ("CL", t.item("thing 2", 4.0, "u-new"))
 
@@ -15,11 +15,11 @@ NEW = ("CL", t.item("thing 2", 4.0, "u-new"))
 async def main():
     W = watches.Watches(t.fake_search([[OLD], [OLD], [OLD, NEW]]))
     W.sync_ha = t._noop
-    w1 = await W.create({"query": "x", "sites": ["craigslist"]}, "x", 6, hunt="Shared", recipients=KARI)
-    await W.create({"query": "y", "sites": ["craigslist"]}, "y", 6, hunt="Shared", recipients=LUCAS)
+    w1 = await W.create({"query": "x", "sites": ["craigslist"]}, "x", 6, hunt="Shared", recipients=ANA)
+    await W.create({"query": "y", "sites": ["craigslist"]}, "y", 6, hunt="Shared", recipients=BEN)
     W.hunt_of(w1)["ha"] = {"entity_id": "input_boolean.x"}
     await W.check(w1["id"])
-    assert t.SENT[-1]["targets"] == ["mobile_app_karis_iphone", "mobile_app_localhost"], t.SENT
+    assert t.SENT[-1]["targets"] == ["mobile_app_anas_iphone", "mobile_app_pixel_8"], t.SENT
 
     t.SENT.clear()
     W2 = watches.Watches(t.fake_search([[OLD], [OLD, NEW]]))

@@ -77,12 +77,28 @@ class Watches:
         self._last_tidy = 0.0
         try:
             with open(STORE) as f:
-                self.data = json.load(f)
+                self._load(json.load(f))
         except FileNotFoundError:
-            self.data = {"next_id": 1, "watches": {}}
+            self._load({"next_id": 1, "watches": {}})
+
+    def _load(self, data: dict):
+        self.data = data
         self.data.setdefault("hunts", {})
         self.data.setdefault("next_hunt", 1)
         self._migrate()
+
+    async def import_state(self, data: dict) -> int:
+        """Load a watches.json from an earlier install (its hunts keep their Home Assistant switches).
+        Refused while any search exists here, so nothing is overwritten. Returns the number of hunts."""
+        if not isinstance(data, dict) or not isinstance(data.get("watches"), dict):
+            raise ValueError("not a watches.json")
+        async with self._lock:
+            if self.data["watches"]:
+                raise ValueError("this install already has searches; delete them before importing")
+            self._load(data)
+        log.info("imported %d hunts, %d searches", len(self.data["hunts"]), len(self.data["watches"]))
+        await self.sync_ha(force=True)
+        return len(self.data["hunts"])
 
     def _migrate(self):
         """Older files had one switch per watch: give each such watch its own hunt."""

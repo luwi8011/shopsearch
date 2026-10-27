@@ -1,27 +1,32 @@
 # shopsearch
 
-Price-research MCP server and deal watcher for a self-hosted LLM (Open WebUI + Strata), with
-Home Assistant alerts. Start with `docs/HANDOFF.md` (architecture, deployment, decisions),
-`docs/HOME_ASSISTANT.md` (everything it creates in HA) and `docs/ROADMAP.md` (open work).
+Price-research MCP server and deal watcher for a self-hosted LLM, shipped as a Home Assistant OS add-on
+(`shopsearch/`; this repo is also the add-on repository). Start with `docs/HANDOFF.md` (architecture,
+deployment, decisions), `docs/HOME_ASSISTANT.md` (everything it creates in HA) and `docs/ROADMAP.md` (open work).
 
-## Run
+**The repo is public.** Never commit hosts, people, tokens or other install details; they go in the
+git-ignored `LOCAL.md` (read it first if it exists: it says where this install runs and how to reach it).
 
-- Deployed as Docker on the `llm` VM (192.168.0.252): `docker compose up -d --build` from the repo root.
-  The code is copied into the image, so every change needs a rebuild.
-- Secrets go in `.env` (template `.env.example`); never commit them. Runtime state is in `data/` (git-ignored).
-- Event log: `data/shopsearch.log`. Docker logs are lost on rebuild.
+## Run and release
+
+- The add-on's code is `shopsearch/app/`, built from `shopsearch/Dockerfile` by the Supervisor on the HA box.
+- Release: bump `version` in `shopsearch/config.yaml`, add to `shopsearch/CHANGELOG.md`, fast-forward `main`,
+  then update the add-on in HA (Supervisor store reload + update). Logs: the add-on's Log tab or
+  `GET /api/hassio/addons/<slug>/logs` with an admin token; events also go to `/data/shopsearch.log`.
+- Plain Docker: `docker compose up -d --build` with `.env` (template `.env.example`).
 
 ## Test
 
-- Quick checks against the running service: `curl 'http://127.0.0.1:8765/api/search?q=...&sites=craigslist,facebook'`,
-  `/api/watches`, `/health`.
-- Unit-style scripts in `tests/` run inside the container with fakes (see tests/README.md).
-- Don't burst-test eBay, Home Depot, Lowe's or other Akamai-protected sites from the home network.
-  Repeated rapid requests got the home IP blocked by eBay.
+- Unit-style scripts in `tests/` run against fakes, locally or in the container (see tests/README.md).
+- The whole server runs locally for REST/MCP checks (see docs/HANDOFF.md, Testing).
+- Don't burst-test eBay, Home Depot, Lowe's or other Akamai-protected sites from a home network.
+  Repeated rapid requests got a home IP blocked by eBay.
 
 ## Conventions
 
 - Python 3.12, asyncio throughout. Keep `mcp==1.30.0` pinned (2.x changed the API).
+- New settings: an add-on option in `config.yaml` (+ `translations/en.yaml`), mapped to an environment
+  variable in `addon_options.py`, read by the module that uses it, and listed in `.env.example`.
 - Every Home Assistant change goes through `Watches.sync_ha()`. Never create helpers elsewhere (duplicate bug).
 - Match the existing style: module docstrings explain the why, few inline comments, f-strings, no type-heavy
   abstractions.

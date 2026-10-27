@@ -6,7 +6,7 @@ import os
 os.environ["TEST_LIVE_LLM"] = "1"
 import _harness as t  # noqa: E402
 
-assert os.environ.get("LLM_URL"), "run inside the shopsearch container so LLM_URL is set"
+assert os.environ.get("LLM_URL"), "set LLM_URL and LLM_MODEL (or run inside the container)"
 t.stub_ha()
 import watches  # noqa: E402
 

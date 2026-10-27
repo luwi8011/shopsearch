@@ -7,19 +7,24 @@ tool loop and ends with a one-sentence summary for the user.
 
 import json
 import logging
+import os
 import time
 
 import httpx
 
 import review
+import sites
 
 log = logging.getLogger("shopsearch.agent")
 
 MAX_STEPS = 10
+# Facts about the user for the model (where they live, how far they drive, what they buy); add-on option about_user.
+USER_PROFILE = os.environ.get("USER_PROFILE", "")
 
 SYSTEM = """You set up price watches for the user from a short request they typed into Home Assistant. They will not see this conversation, only your final one-sentence summary on their phone.
 
-About the user: lives in Erie, Colorado (ZIP 80516). Usually drives up to ~30 minutes for local pickup (craigslist/facebook radius_miles 25) but goes farther for big or rare items (raise radius_miles to 60-150 for vehicles, machinery, rare parts). They buy new and used.
+About the user: {profile}
+Local pickup (craigslist/facebook): the default radius_miles is {radius}. For big or rare items (vehicles, machinery, rare parts) raise radius_miles to 60-150.
 
 How to work:
 1. Pick sites that actually sell this kind of item. Known sites: {sites}. Local/used: craigslist, facebook. Any other store works by domain.
@@ -55,9 +60,11 @@ TOOLS = [
 ]
 
 
-async def run(request: str, sites: str, call_tool) -> str:
+async def run(request: str, known_sites: str, call_tool) -> str:
     """call_tool: async (name, args) -> str. Returns the model's final summary."""
-    msgs = [{"role": "system", "content": SYSTEM.format(sites=sites)},
+    profile = USER_PROFILE or (f"lives near ZIP {sites.HOME_ZIP}." if sites.HOME_ZIP else "nothing known.")
+    system = SYSTEM.format(profile=profile, radius=sites.LOCAL_RADIUS_MI, sites=known_sites)
+    msgs = [{"role": "system", "content": system},
             {"role": "user", "content": request}]
     for step in range(MAX_STEPS):
         t = time.time()
