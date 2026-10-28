@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.4
+
+- Alerts for auctions say so: "$4 bid, auction ends Nov 1" instead of a bare "$4", which read like an accessory
+  price.
+
 ## 1.2.3
 
 - eBay (official API) finds auctions again. The API leaves out an auction as soon as it gets a bid, so the

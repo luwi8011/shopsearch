@@ -606,12 +606,20 @@ class Watches:
         def money(p):
             return f"${p:,.0f}" if p is not None else "No price"
 
+        def asking(rec, p):
+            """An auction's price is only the current bid; say so, or a $4 opening bid on a $150 item reads
+            like a $4 accessory."""
+            m = re.search(r"\bAUCTION\b.*?ends (\d{4}-\d{2}-\d{2})", rec.get("details", ""))
+            if not m:
+                return money(p)
+            return f"{money(p)} bid, auction ends {datetime.date.fromisoformat(m.group(1)):%b} {int(m.group(1)[8:])}"
+
         def where(rec):
             return ", ".join(x for x in (rec.get("details", "").split(" · ")[0], rec["store"]) if x)
 
         now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
         entries = [{"t": now, "id": listing_id(u), "title": rec["title"][:120], "url": u,
-                    "price": money(rec.get("price")), "was": "", "where": where(rec),
+                    "price": asking(rec, rec.get("price")), "was": "", "where": where(rec),
                     "note": (rec.get("review") or {}).get("note", "")} for u, rec in new]
         entries += [{"t": now, "id": listing_id(u), "title": rec["title"][:120], "url": u, "price": money(rec["price"]),
                      "was": money(rec["prev_price"]), "where": where(rec),
